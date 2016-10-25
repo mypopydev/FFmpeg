@@ -219,6 +219,18 @@ static int vaapi_encode_issue(AVCodecContext *avctx,
                 goto fail;
         }
     }
+    else {
+        for (i = 0; i < ctx->nb_global_params; i++) {
+            if (ctx->global_params[i]->type == VAEncMiscParameterTypeQualityLevel) {
+                err = vaapi_encode_make_param_buffer(avctx, pic,
+                                                     VAEncMiscParameterBufferType,
+                                                     (char*)ctx->global_params[i],
+                                                      ctx->global_params_size[i]);
+                if (err < 0)
+                    goto fail;
+            }
+        }
+    }
 
     if (pic->type == PICTURE_TYPE_IDR && ctx->codec->init_sequence_params) {
         err = vaapi_encode_make_param_buffer(avctx, pic,

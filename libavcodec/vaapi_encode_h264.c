@@ -990,7 +990,7 @@ static const AVOption vaapi_encode_h264_options[] = {
     { "qp", "Constant QP (for P-frames; scaled by qfactor/qoffset for I/B)",
       OFFSET(qp), AV_OPT_TYPE_INT, { .i64 = 20 }, 0, 52, FLAGS },
     { "quality", "Set encode quality (trades off against speed, higher is faster)",
-      OFFSET(quality), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 8, FLAGS },
+      OFFSET(quality), AV_OPT_TYPE_INT, { .i64 = 4 }, 1, 7, FLAGS },
     { "low_power", "Use low-power encoding mode (experimental: only supported "
       "on some platforms, does not support all features)",
       OFFSET(low_power), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, FLAGS },
