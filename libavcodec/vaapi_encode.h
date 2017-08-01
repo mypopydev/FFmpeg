@@ -164,6 +164,10 @@ typedef struct VAAPIEncodeContext {
     } quality_params;
 #endif
 
+    // Supported max-slices number per frame. (0 means driver cannot
+    // support max mutil-slices query)
+    int             max_slices;
+
     // Per-sequence parameter structure (VAEncSequenceParameterBuffer*).
     void           *codec_sequence_params;
 
