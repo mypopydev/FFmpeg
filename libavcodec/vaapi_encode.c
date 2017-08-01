@@ -971,6 +971,7 @@ static av_cold int vaapi_encode_config_attributes(AVCodecContext *avctx)
         { VAConfigAttribRTFormat         },
         { VAConfigAttribRateControl      },
         { VAConfigAttribEncMaxRefFrames  },
+        { VAConfigAttribEncMaxSlices     },
         { VAConfigAttribEncPackedHeaders },
     };
 
@@ -1103,6 +1104,9 @@ static av_cold int vaapi_encode_config_attributes(AVCodecContext *avctx)
             }
         }
         break;
+        case VAConfigAttribEncMaxSlices:
+            ctx->max_slices = attr[i].value;
+            break;
         case VAConfigAttribEncPackedHeaders:
             if (ctx->va_packed_headers & ~attr[i].value) {
                 // This isn't fatal, but packed headers are always
