@@ -779,14 +779,14 @@ static int vaapi_encode_h264_init_sequence_params(AVCodecContext *avctx)
     VAAPIEncodeH264MiscSequenceParams *mseq = &priv->misc_sequence_params;
     VAAPIEncodeH264Options             *opt =
         (VAAPIEncodeH264Options*)ctx->codec_options_data;
-    int i;
+    int i, num, max_delta_poc;
 
     {
         vseq->seq_parameter_set_id = 0;
 
         vseq->level_idc = avctx->level;
 
-        vseq->max_num_ref_frames = 1 + (avctx->max_b_frames > 0);
+        vseq->max_num_ref_frames = 1 + ctx->max_ref_nr;
 
         vseq->picture_width_in_mbs  = priv->mb_width;
         vseq->picture_height_in_mbs = priv->mb_height;
@@ -796,9 +796,15 @@ static int vaapi_encode_h264_init_sequence_params(AVCodecContext *avctx)
         vseq->seq_fields.bits.direct_8x8_inference_flag = 1;
         vseq->seq_fields.bits.log2_max_frame_num_minus4 = 4;
         vseq->seq_fields.bits.pic_order_cnt_type = 0;
-        vseq->seq_fields.bits.log2_max_pic_order_cnt_lsb_minus4 =
-            av_clip(av_log2(avctx->max_b_frames + 1) - 2, 0, 12);
 
+        i = 1;
+        num = 0;
+        max_delta_poc = (2 + avctx->max_b_frames) * 2;
+        while (i < max_delta_poc * 2) {
+            i <<= 1;
+            num ++;
+        }
+        vseq->seq_fields.bits.log2_max_pic_order_cnt_lsb_minus4 = num > 4 ? num - 4 : 0;
         if (avctx->width  != ctx->surface_width ||
             avctx->height != ctx->surface_height) {
             vseq->frame_cropping_flag = 1;
@@ -973,6 +979,8 @@ static int vaapi_encode_h264_init_picture_params(AVCodecContext *avctx,
     vpic->frame_num = vpic->frame_num &
         ((1 << (4 + vseq->seq_fields.bits.log2_max_frame_num_minus4)) - 1);
 
+    vpic->num_ref_idx_l0_active_minus1= FFMAX(0, pic->nb_refs - 1);
+    vpic->num_ref_idx_l1_active_minus1= FFMAX(0, pic->nb_refs - 2);
     vpic->CurrPic.picture_id          = pic->recon_surface;
     vpic->CurrPic.frame_idx           = vpic->frame_num;
     vpic->CurrPic.flags               = 0;
@@ -1067,23 +1075,19 @@ static int vaapi_encode_h264_init_slice_params(AVCodecContext *avctx,
         vslice->RefPicList1[i].flags      = VA_PICTURE_H264_INVALID;
     }
 
-    av_assert0(pic->nb_refs <= 2);
-    if (pic->nb_refs >= 1) {
-        // Backward reference for P- or B-frame.
-        av_assert0(pic->type == PICTURE_TYPE_P ||
-                   pic->type == PICTURE_TYPE_B);
-
-        vslice->num_ref_idx_l0_active_minus1 = 0;
-        vslice->RefPicList0[0] = vpic->ReferenceFrames[0];
+    vslice->num_ref_idx_active_override_flag = 1;
+    if (pic->type == PICTURE_TYPE_P) {
+        for (i = 0; i < FFMIN(pic->nb_refs, ctx->max_forward_ref); i++)
+            vslice->RefPicList0[i] = vpic->ReferenceFrames[pic->nb_refs - 1 - i];
+        vslice->num_ref_idx_l0_active_minus1 = FFMAX(0, pic->nb_refs - 1);
     }
-    if (pic->nb_refs >= 2) {
-        // Forward reference for B-frame.
-        av_assert0(pic->type == PICTURE_TYPE_B);
-
+    if (pic->type == PICTURE_TYPE_B) {
+        vslice->num_ref_idx_l0_active_minus1 = FFMAX(0, pic->nb_refs - 2);
+        for (i = 0; i < FFMIN(pic->nb_refs - 1, ctx->max_forward_ref); i++)
+           vslice->RefPicList0[i] = vpic->ReferenceFrames[pic->nb_refs - 2 - i];
         vslice->num_ref_idx_l1_active_minus1 = 0;
-        vslice->RefPicList1[0] = vpic->ReferenceFrames[1];
+        vslice->RefPicList1[0] = vpic->ReferenceFrames[pic->nb_refs - 1];
     }
-
     if (pic->type == PICTURE_TYPE_B)
         vslice->slice_qp_delta = priv->fixed_qp_b - vpic->pic_init_qp;
     else if (pic->type == PICTURE_TYPE_P)

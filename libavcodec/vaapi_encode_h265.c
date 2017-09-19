@@ -961,7 +961,8 @@ static int vaapi_encode_h265_init_picture_params(AVCodecContext *avctx,
     VAAPIEncodeContext               *ctx = avctx->priv_data;
     VAEncPictureParameterBufferHEVC *vpic = pic->codec_picture_params;
     VAAPIEncodeH265Context          *priv = ctx->priv_data;
-    int i;
+    VAAPIEncodePicture               *ref = NULL;
+    int i, n;
 
     if (pic->type == PICTURE_TYPE_IDR) {
         av_assert0(pic->display_order == pic->encode_order);
@@ -976,8 +977,13 @@ static int vaapi_encode_h265_init_picture_params(AVCodecContext *avctx,
         pic->display_order - priv->last_idr_frame;
     vpic->decoded_curr_pic.flags         = 0;
 
+    n = 0;
     for (i = 0; i < pic->nb_refs; i++) {
-        VAAPIEncodePicture *ref = pic->refs[i];
+        if (pic->type == PICTURE_TYPE_P && i < (pic->nb_refs - ctx->max_forward_ref))
+            n = pic->nb_refs - ctx->max_forward_ref;
+        else
+            n = 0;
+        ref = pic->refs[i + n];
         av_assert0(ref);
         vpic->reference_frames[i].picture_id    = ref->recon_surface;
         vpic->reference_frames[i].pic_order_cnt =
@@ -1077,21 +1083,19 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
         vslice->ref_pic_list1[i].flags      = VA_PICTURE_HEVC_INVALID;
     }
 
-    av_assert0(pic->nb_refs <= 2);
-    if (pic->nb_refs >= 1) {
-        // Backward reference for P- or B-frame.
-        av_assert0(pic->type == PICTURE_TYPE_P ||
-                   pic->type == PICTURE_TYPE_B);
-
-        vslice->num_ref_idx_l0_active_minus1 = 0;
-        vslice->ref_pic_list0[0] = vpic->reference_frames[0];
+    vslice->slice_fields.bits.num_ref_idx_active_override_flag = 1;
+    if (pic->type == PICTURE_TYPE_P) {
+        vslice->num_ref_idx_l0_active_minus1 = FFMAX(0, FFMIN(pic->nb_refs, ctx->max_forward_ref) - 1);
+        for (i = 0; i < FFMIN(ctx->max_forward_ref, pic->nb_refs); i++) {
+            vslice->ref_pic_list0[i] = vpic->reference_frames[pic->nb_refs - 1 - i];
+        }
     }
-    if (pic->nb_refs >= 2) {
-        // Forward reference for B-frame.
-        av_assert0(pic->type == PICTURE_TYPE_B);
-
+    if (pic->type == PICTURE_TYPE_B) {
+        vslice->num_ref_idx_l0_active_minus1 = FFMAX(0, pic->nb_refs - 2);
+        for (i = 0; i < FFMIN(ctx->max_forward_ref, pic->nb_refs - 1); i++)
+            vslice->ref_pic_list0[i] = vpic->reference_frames[pic->nb_refs - 2 - i];
         vslice->num_ref_idx_l1_active_minus1 = 0;
-        vslice->ref_pic_list1[0] = vpic->reference_frames[1];
+        vslice->ref_pic_list1[0] = vpic->reference_frames[pic->nb_refs - 1];
     }
 
     vslice->max_num_merge_cand = 5;
@@ -1113,41 +1117,42 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
         mslice->short_term_ref_pic_set_sps_flag = 1;
         mslice->short_term_ref_pic_idx = 0;
     } else {
-        VAAPIEncodePicture *st;
-        int used;
-
         mslice->short_term_ref_pic_set_sps_flag = 0;
         mslice->st_ref_pic_set.inter_ref_pic_set_prediction_flag = 0;
 
-        for (st = ctx->pic_start; st; st = st->next) {
-            if (st->encode_order >= pic->encode_order) {
-                // Not yet in DPB.
-                continue;
+        if (pic->type == PICTURE_TYPE_P ||  pic->type == PICTURE_TYPE_I) {
+            mslice->st_ref_pic_set.num_negative_pics = pic->nb_refs;
+            for (i = 0 ; i < mslice->st_ref_pic_set.num_negative_pics; i++) {
+                mslice->st_ref_pic_set.used_by_curr_pic_s0_flag[i] = 1;
+                if (i == 0) {
+                    mslice->st_ref_pic_set.delta_poc_s0_minus1[i] =
+                        pslice->pic_order_cnt - vpic->reference_frames[pic->nb_refs - 1 - i].pic_order_cnt - 1;
+                } else {
+                    mslice->st_ref_pic_set.delta_poc_s0_minus1[i] =
+                        vpic->reference_frames[pic->nb_refs - i].pic_order_cnt -
+                        vpic->reference_frames[pic->nb_refs - 1 - i].pic_order_cnt - 1;
+                }
             }
-            used = 0;
-            for (i = 0; i < pic->nb_refs; i++) {
-                if (pic->refs[i] == st)
-                    used = 1;
-            }
-            if (!used) {
-                // Currently true, but need not be.
-                continue;
-            }
-            // This only works for one instance of each (delta_poc_sN_minus1
-            // is relative to the previous frame in the list, not relative to
-            // the current frame directly).
-            if (st->display_order < pic->display_order) {
-                i = mslice->st_ref_pic_set.num_negative_pics;
-                mslice->st_ref_pic_set.delta_poc_s0_minus1[i] =
-                    pic->display_order - st->display_order - 1;
-                mslice->st_ref_pic_set.used_by_curr_pic_s0_flag[i] = used;
-                ++mslice->st_ref_pic_set.num_negative_pics;
-            } else {
-                i = mslice->st_ref_pic_set.num_positive_pics;
+        }
+
+        if (pic->type == PICTURE_TYPE_B) {
+            mslice->st_ref_pic_set.num_positive_pics = 1;
+            for (i = 0 ; i < mslice->st_ref_pic_set.num_positive_pics; i++) {
+                mslice->st_ref_pic_set.used_by_curr_pic_s1_flag[i] = 1;
                 mslice->st_ref_pic_set.delta_poc_s1_minus1[i] =
-                    st->display_order - pic->display_order - 1;
-                mslice->st_ref_pic_set.used_by_curr_pic_s1_flag[i] = used;
-                ++mslice->st_ref_pic_set.num_positive_pics;
+                    vpic->reference_frames[pic->nb_refs - 1 - i].pic_order_cnt - pslice->pic_order_cnt - 1;
+            }
+            mslice->st_ref_pic_set.num_negative_pics = pic->nb_refs - 1 ;
+            for (i = 0 ; i < mslice->st_ref_pic_set.num_negative_pics; i++) {
+                mslice->st_ref_pic_set.used_by_curr_pic_s0_flag[i] = 1;
+                if (i == 0) {
+                    mslice->st_ref_pic_set.delta_poc_s0_minus1[i] =
+                        pslice->pic_order_cnt - vpic->reference_frames[pic->nb_refs - 2 - i].pic_order_cnt - 1;
+                } else {
+                    mslice->st_ref_pic_set.delta_poc_s0_minus1[i] =
+                        vpic->reference_frames[pic->nb_refs - 1 - i].pic_order_cnt -
+                        vpic->reference_frames[pic->nb_refs - 2 - i].pic_order_cnt - 1;
+                }
             }
         }
     }
