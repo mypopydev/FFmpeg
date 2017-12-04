@@ -841,8 +841,8 @@ static av_cold int vaapi_encode_h265_configure(AVCodecContext *avctx)
                "%d / %d / %d for IDR- / P- / B-frames.\n",
                priv->fixed_qp_idr, priv->fixed_qp_p, priv->fixed_qp_b);
 
-    } else if (ctx->va_rc_mode == VA_RC_CBR ||
-               ctx->va_rc_mode == VA_RC_VBR) {
+    } else if (ctx->va_rc_mode == (VA_RC_CBR | VA_RC_MB) ||
+               ctx->va_rc_mode == (VA_RC_VBR | VA_RC_MB)) {
         // These still need to be  set for pic_init_qp/slice_qp_delta.
         priv->fixed_qp_idr = 30;
         priv->fixed_qp_p   = 30;
@@ -918,9 +918,9 @@ static av_cold int vaapi_encode_h265_init(AVCodecContext *avctx)
 
     if (avctx->bit_rate > 0) {
         if (avctx->rc_max_rate == avctx->bit_rate)
-            ctx->va_rc_mode = VA_RC_CBR;
+            ctx->va_rc_mode = VA_RC_CBR | VA_RC_MB;
         else
-            ctx->va_rc_mode = VA_RC_VBR;
+            ctx->va_rc_mode = VA_RC_VBR | VA_RC_MB;
     } else
         ctx->va_rc_mode = VA_RC_CQP;
 
