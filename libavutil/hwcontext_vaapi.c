@@ -286,6 +286,11 @@ static const struct {
         AV_VAAPI_DRIVER_QUIRK_ATTRIB_MEMTYPE,
     },
     {
+        "Intel iHD",
+        "2.0.0",
+        AV_VAAPI_DRIVER_QUIRK_ATTRIB_MEMTYPE,
+    },
+    {
         "VDPAU wrapper",
         "Splitted-Desktop Systems VDPAU backend for VA-API",
         AV_VAAPI_DRIVER_QUIRK_SURFACE_ATTRIBUTES,
