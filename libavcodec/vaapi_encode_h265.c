@@ -757,6 +757,12 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
     else
         sh->slice_qp_delta = priv->fixed_qp_idr - (pps->init_qp_minus26 + 26);
 
+    for (i = 0; i < FF_ARRAY_ELEMS(vslice->ref_pic_list0); i++) {
+        vslice->ref_pic_list0[i].picture_id = VA_INVALID_ID;
+        vslice->ref_pic_list0[i].flags      = VA_PICTURE_HEVC_INVALID;
+        vslice->ref_pic_list1[i].picture_id = VA_INVALID_ID;
+        vslice->ref_pic_list1[i].flags      = VA_PICTURE_HEVC_INVALID;
+    }
 
     *vslice = (VAEncSliceParameterBufferHEVC) {
         .slice_segment_address = sh->slice_segment_address,
