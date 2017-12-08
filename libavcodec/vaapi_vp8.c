@@ -201,7 +201,7 @@ static int vaapi_vp8_decode_slice(AVCodecContext *avctx,
         .slice_data_flag   = VA_SLICE_DATA_FLAG_ALL,
 
         .macroblock_offset = (8 * (s->coder_state_at_header_end.input - data) -
-                              s->coder_state_at_header_end.bit_count - 8),
+                              s->coder_state_at_header_end.bit_count - 8) + 8,
         .num_of_partitions = s->num_coeff_partitions + 1,
     };
 
