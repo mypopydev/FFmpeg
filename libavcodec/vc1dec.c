@@ -903,7 +903,8 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
             s->picture_structure = PICT_BOTTOM_FIELD - v->tff;
             if ((ret = avctx->hwaccel->start_frame(avctx, buf_start, buf_start_second_field - buf_start)) < 0)
                 goto err;
-            if ((ret = avctx->hwaccel->decode_slice(avctx, buf_start, buf_start_second_field - buf_start)) < 0)
+            if ((ret = avctx->hwaccel->decode_slice(avctx, s->gb.buffer, s->gb.buffer_end - s->gb.buffer)) < 0)
+//            if ((ret = avctx->hwaccel->decode_slice(avctx, buf_start, buf_start_second_field - buf_start)) < 0)
                 goto err;
             if ((ret = avctx->hwaccel->end_frame(avctx)) < 0)
                 goto err;
@@ -922,7 +923,8 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
 
             if ((ret = avctx->hwaccel->start_frame(avctx, buf_start_second_field, (buf + buf_size) - buf_start_second_field)) < 0)
                 goto err;
-            if ((ret = avctx->hwaccel->decode_slice(avctx, buf_start_second_field, (buf + buf_size) - buf_start_second_field)) < 0)
+            if ((ret = avctx->hwaccel->decode_slice(avctx, s->gb.buffer, s->gb.buffer_end - s->gb.buffer)) < 0)
+//            if ((ret = avctx->hwaccel->decode_slice(avctx, buf_start_second_field, (buf + buf_size) - buf_start_second_field)) < 0)
                 goto err;
             if ((ret = avctx->hwaccel->end_frame(avctx)) < 0)
                 goto err;
@@ -933,7 +935,8 @@ static int vc1_decode_frame(AVCodecContext *avctx, void *data,
 
             if (n_slices == 0) {
                 // no slices, decode the frame as-is
-                if ((ret = avctx->hwaccel->decode_slice(avctx, buf_start, (buf + buf_size) - buf_start)) < 0)
+            	if ((ret = avctx->hwaccel->decode_slice(avctx, s->gb.buffer, s->gb.buffer_end - s->gb.buffer)) < 0)
+//                if ((ret = avctx->hwaccel->decode_slice(avctx, buf_start, (buf + buf_size) - buf_start)) < 0)
                     goto err;
             } else {
                 // decode the frame part as the first slice
