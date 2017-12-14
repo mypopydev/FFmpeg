@@ -850,6 +850,7 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
 
     v->numref          = 0;
     v->p_frame_skipped = 0;
+    v->twomvbp_vlc = NULL;
     if (v->second_field) {
         if (v->fcm != ILACE_FIELD || v->field_mode!=1)
             return -1;
@@ -1045,6 +1046,10 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
                 v->dmvrange = 0;
             if (v->fcm == ILACE_FRAME) { // interlaced frame picture
                 v->fourmvswitch = get_bits1(gb);
+                if (v->fourmvswitch)
+                    v->mv_mode = MV_PMODE_MIXED_MV;
+                else
+                    v->mv_mode = MV_PMODE_1MV;
                 v->intcomp      = get_bits1(gb);
                 if (v->intcomp) {
                     v->lumscale = get_bits(gb, 6);
@@ -1057,11 +1062,13 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
                 av_log(v->s.avctx, AV_LOG_DEBUG, "SKIPMB plane encoding: "
                        "Imode: %i, Invert: %i\n", status>>1, status&1);
                 mbmodetab = get_bits(gb, 2);
+                v->mbmodetab = mbmodetab;
                 if (v->fourmvswitch)
                     v->mbmode_vlc = &ff_vc1_intfr_4mv_mbmode_vlc[mbmodetab];
                 else
                     v->mbmode_vlc = &ff_vc1_intfr_non4mv_mbmode_vlc[mbmodetab];
                 imvtab         = get_bits(gb, 2);
+                v->s.mv_table_index = imvtab;
                 v->imv_vlc     = &ff_vc1_1ref_mvdata_vlc[imvtab];
                 // interlaced p-picture cbpcy range is [1, 63]
                 icbptab        = get_bits(gb, 3);
@@ -1161,7 +1168,9 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
             v->s.mspel          = 1;
         } else {    // field interlaced
             mbmodetab = get_bits(gb, 3);
+            v->mbmodetab = mbmodetab;
             imvtab = get_bits(gb, 2 + v->numref);
+            v->s.mv_table_index = imvtab;
             if (!v->numref)
                 v->imv_vlc = &ff_vc1_1ref_mvdata_vlc[imvtab];
             else
@@ -1229,11 +1238,13 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
             av_log(v->s.avctx, AV_LOG_DEBUG, "MB Forward Type plane encoding: "
                    "Imode: %i, Invert: %i\n", status>>1, status&1);
             mbmodetab = get_bits(gb, 3);
+            v->mbmodetab = mbmodetab;
             if (v->mv_mode == MV_PMODE_MIXED_MV)
                 v->mbmode_vlc = &ff_vc1_if_mmv_mbmode_vlc[mbmodetab];
             else
                 v->mbmode_vlc = &ff_vc1_if_1mv_mbmode_vlc[mbmodetab];
             imvtab       = get_bits(gb, 3);
+            v->s.mv_table_index = imvtab;
             v->imv_vlc   = &ff_vc1_2ref_mvdata_vlc[imvtab];
             icbptab      = get_bits(gb, 3);
             v->cbpcy_vlc = &ff_vc1_icbpcy_vlc[icbptab];
@@ -1264,8 +1275,10 @@ int ff_vc1_parse_frame_header_adv(VC1Context *v, GetBitContext* gb)
             av_log(v->s.avctx, AV_LOG_DEBUG, "MB Skip plane encoding: "
                    "Imode: %i, Invert: %i\n", status>>1, status&1);
             mbmodetab       = get_bits(gb, 2);
+            v->mbmodetab    = mbmodetab;
             v->mbmode_vlc   = &ff_vc1_intfr_non4mv_mbmode_vlc[mbmodetab];
             imvtab          = get_bits(gb, 2);
+            v->s.mv_table_index = imvtab;
             v->imv_vlc      = &ff_vc1_1ref_mvdata_vlc[imvtab];
             // interlaced p/b-picture cbpcy range is [1, 63]
             icbptab         = get_bits(gb, 3);
