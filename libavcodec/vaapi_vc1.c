@@ -81,7 +81,7 @@ static inline int vc1_has_ACPRED_bitplane(const VC1Context *v)
 }
 
 /** Check whether the field tx bitplane is present */
-static inline int vc1_has_FIELDTX_bitplane(VC1Context *v)
+static inline int vc1_has_FIELDTX_bitplane(const VC1Context *v)
 {
     if (v->fieldtx_is_raw)
         return 0;
@@ -91,7 +91,7 @@ static inline int vc1_has_FIELDTX_bitplane(VC1Context *v)
 }
 
 /** Check whether the forward mb bitplane is present */
-static inline int vc1_has_FORWARDMB_bitplane(VC1Context *v)
+static inline int vc1_has_FORWARDMB_bitplane(const VC1Context *v)
 {
     if (v->fmb_is_raw)
         return 0;
