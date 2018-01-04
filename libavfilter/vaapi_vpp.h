@@ -26,7 +26,7 @@
 
 #include "avfilter.h"
 
-typedef struct VPPVAAPIContext {
+typedef struct VAAPIVPPContext {
     const AVClass *class;
 
     AVVAAPIDeviceContext *hwctx;
@@ -49,39 +49,39 @@ typedef struct VPPVAAPIContext {
 
     int                num_filter_bufs;
     VABufferID         filter_bufs[VAProcFilterCount];
-} VPPVAAPIContext;
+} VAAPIVPPContext;
 
 int ff_vaapi_query_formats(AVFilterContext *avctx);
 
-int ff_vaapi_vpp_make_param_buffer(VPPVAAPIContext *ctx,
+int ff_vaapi_vpp_make_param_buffer(VAAPIVPPContext *ctx,
                                       int type,
                                       const void *data,
                                       size_t size);
 
-int ff_vaapi_vpp_make_param_array(VPPVAAPIContext *ctx,
+int ff_vaapi_vpp_make_param_array(VAAPIVPPContext *ctx,
                                       int type, size_t count,
                                       const void *data,
                                       size_t size);
 
-int vaapi_vpp_output_surface_ready(VPPVAAPIContext *ctx, VASurfaceID output_surface);
+int vaapi_vpp_output_surface_ready(VAAPIVPPContext *ctx, VASurfaceID output_surface);
 
-int vaapi_vpp_make_pipeline_param(VPPVAAPIContext *ctx, VAProcPipelineParameterBuffer *params);
+int vaapi_vpp_make_pipeline_param(VAAPIVPPContext *ctx, VAProcPipelineParameterBuffer *params);
 
-int vaapi_vpp_apply_pipeline_param(VPPVAAPIContext *ctx);
+int vaapi_vpp_apply_pipeline_param(VAAPIVPPContext *ctx);
 
-int ff_vaapi_vpp_destroy_param_buffer(VPPVAAPIContext *ctx);
+int ff_vaapi_vpp_destroy_param_buffer(VAAPIVPPContext *ctx);
 
-int vaapi_vpp_init(VPPVAAPIContext *ctx);
+int vaapi_vpp_init(VAAPIVPPContext *ctx);
 
-int vaapi_vpp_filter_frame(VPPVAAPIContext *ctx, AVFrame *input_frame, AVFrame *output_frame);
+int vaapi_vpp_filter_frame(VAAPIVPPContext *ctx, AVFrame *input_frame, AVFrame *output_frame);
 
-void vaapi_vpp_uninit(VPPVAAPIContext *ctx);
+void vaapi_vpp_uninit(VAAPIVPPContext *ctx);
 
-int vaapi_vpp_config_input(VPPVAAPIContext *ctx, AVFilterLink *inlink);
+int vaapi_vpp_config_input(VAAPIVPPContext *ctx, AVFilterLink *inlink);
 
-int vaapi_vpp_config_input1(VPPVAAPIContext *ctx, AVFilterLink *inlink);
+int vaapi_vpp_config_input1(VAAPIVPPContext *ctx, AVFilterLink *inlink);
 
-int vaapi_vpp_config_output(VPPVAAPIContext *ctx);
+int vaapi_vpp_config_output(VAAPIVPPContext *ctx);
 
 int vaapi_proc_colour_standard(enum AVColorSpace av_cs);
 #endif

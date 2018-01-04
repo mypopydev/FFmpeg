@@ -32,7 +32,7 @@
 #include "vaapi_vpp.h"
 
 typedef struct MiscVAAPIContext {
-    VPPVAAPIContext *vpp_ctx;
+    VAAPIVPPContext *vpp_ctx;
     int denoise;         // enable denoise algo. level is the optional
                          // value from the interval [-1, 100], -1 means disabled
     int sharpness;       // enable sharpness. level is the optional value
@@ -177,7 +177,7 @@ static av_cold int misc_vaapi_init(AVFilterContext *avctx)
 {
     MiscVAAPIContext *ctx = avctx->priv;
 
-    ctx->vpp_ctx = av_mallocz(sizeof(VPPVAAPIContext));
+    ctx->vpp_ctx = av_mallocz(sizeof(VAAPIVPPContext));
     if (!ctx->vpp_ctx)
         return AVERROR(ENOMEM);
     vaapi_vpp_init(ctx->vpp_ctx);

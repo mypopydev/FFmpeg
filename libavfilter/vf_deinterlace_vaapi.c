@@ -38,7 +38,7 @@
 #define MAX_REFERENCES 8
 
 typedef struct DeintVAAPIContext {
-    VPPVAAPIContext *vpp_ctx;
+    VAAPIVPPContext *vpp_ctx;
 
     int                mode;
     int                field_rate;
@@ -366,7 +366,7 @@ static av_cold int deint_vaapi_init(AVFilterContext *avctx)
 {
     DeintVAAPIContext *ctx = avctx->priv;
 
-    ctx->vpp_ctx = av_mallocz(sizeof(VPPVAAPIContext));
+    ctx->vpp_ctx = av_mallocz(sizeof(VAAPIVPPContext));
     if (!ctx->vpp_ctx)
         return AVERROR(ENOMEM);
     vaapi_vpp_init(ctx->vpp_ctx);

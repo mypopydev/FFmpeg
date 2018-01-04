@@ -29,7 +29,7 @@
 #include "vaapi_vpp.h"
 
 typedef struct ProcampVAAPIContext {
-    VPPVAAPIContext *vpp_ctx;
+    VAAPIVPPContext *vpp_ctx;
 
     int output_width;
     int output_height;
@@ -179,7 +179,7 @@ static av_cold int procamp_vaapi_init(AVFilterContext *avctx)
 {
     ProcampVAAPIContext *ctx = avctx->priv;
 
-    ctx->vpp_ctx = av_mallocz(sizeof(VPPVAAPIContext));
+    ctx->vpp_ctx = av_mallocz(sizeof(VAAPIVPPContext));
     if (!ctx->vpp_ctx)
         return AVERROR(ENOMEM);
     vaapi_vpp_init(ctx->vpp_ctx);
