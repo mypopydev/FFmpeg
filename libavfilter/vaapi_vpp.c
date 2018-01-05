@@ -64,7 +64,7 @@ int ff_vaapi_vpp_make_param_array(VAAPIVPPContext *ctx,
     av_assert0(ctx->num_filter_bufs + 1 <= VAProcFilterCount);
 
     vas = vaCreateBuffer(ctx->hwctx->display, ctx->va_context,
-                         type, size, 1, (void*)data, &buffer);
+                         type, size, count, (void*)data, &buffer);
     if (vas != VA_STATUS_SUCCESS) {
         return AVERROR(EIO);
     }

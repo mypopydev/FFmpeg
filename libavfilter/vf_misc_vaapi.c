@@ -59,8 +59,8 @@ static int misc_vaapi_build_filter_params(AVFilterContext *avctx)
     VAStatus vas;
     VAProcFilterCap denoise_caps;
     VAProcFilterCap sharpness_caps;
-    unsigned int num_denoise_caps = 1;
-    unsigned int num_sharpness_caps = 1;
+    uint32_t num_denoise_caps = 1;
+    uint32_t num_sharpness_caps = 1;
     VAProcFilterParameterBuffer denoise;
     VAProcFilterParameterBuffer sharpness;
     int err = 0;
