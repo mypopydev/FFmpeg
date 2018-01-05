@@ -142,43 +142,31 @@ static int procamp_vaapi_build_filter_params(AVFilterContext *avctx)
 
     procamp_params[0].type   = VAProcFilterColorBalance;
     procamp_params[0].attrib = VAProcColorBalanceBrightness;
-    procamp_params[0].value  = 0.0;
-    if (ctx->bright) {
-        procamp_params[0].value =
-            av_clip(ctx->bright,
-                    procamp_caps[VAProcColorBalanceBrightness-1].range.min_value,
-                    procamp_caps[VAProcColorBalanceBrightness-1].range.max_value);
-    }
+    procamp_params[0].value =
+        av_clip(ctx->bright,
+                procamp_caps[VAProcColorBalanceBrightness-1].range.min_value,
+                procamp_caps[VAProcColorBalanceBrightness-1].range.max_value);
 
     procamp_params[1].type   = VAProcFilterColorBalance;
     procamp_params[1].attrib = VAProcColorBalanceContrast;
-    procamp_params[1].value  = 1.0;
-    if (ctx->contrast != 1) {
-        procamp_params[1].value =
-            av_clip(ctx->contrast,
-                    procamp_caps[VAProcColorBalanceContrast-1].range.min_value,
-                    procamp_caps[VAProcColorBalanceContrast-1].range.max_value);
-    }
+    procamp_params[1].value =
+        av_clip(ctx->contrast,
+                procamp_caps[VAProcColorBalanceContrast-1].range.min_value,
+                procamp_caps[VAProcColorBalanceContrast-1].range.max_value);
 
     procamp_params[2].type   = VAProcFilterColorBalance;
     procamp_params[2].attrib = VAProcColorBalanceHue;
-    procamp_params[2].value  = 0.0;
-    if (ctx->hue) {
-        procamp_params[2].value =
-            av_clip(ctx->hue,
-                    procamp_caps[VAProcColorBalanceHue-1].range.min_value,
-                    procamp_caps[VAProcColorBalanceHue-1].range.max_value);
-    }
+    procamp_params[2].value =
+        av_clip(ctx->hue,
+                procamp_caps[VAProcColorBalanceHue-1].range.min_value,
+                procamp_caps[VAProcColorBalanceHue-1].range.max_value);
 
     procamp_params[3].type   = VAProcFilterColorBalance;
     procamp_params[3].attrib = VAProcColorBalanceSaturation;
-    procamp_params[3].value  = 1.0;
-    if (ctx->saturation != 1) {
-        procamp_params[3].value =
-            av_clip(ctx->saturation,
-                    procamp_caps[VAProcColorBalanceSaturation-1].range.min_value,
-                    procamp_caps[VAProcColorBalanceSaturation-1].range.max_value);
-    }
+    procamp_params[3].value =
+        av_clip(ctx->saturation,
+                procamp_caps[VAProcColorBalanceSaturation-1].range.min_value,
+                procamp_caps[VAProcColorBalanceSaturation-1].range.max_value);
 
     av_assert0(ctx->filter_buffer == VA_INVALID_ID);
     vas = vaCreateBuffer(ctx->hwctx->display, ctx->va_context,
@@ -472,7 +460,7 @@ static av_cold int procamp_vaapi_init(AVFilterContext *avctx)
     ctx->valid_ids  = 1;
 
     ctx->output_format = AV_PIX_FMT_NONE;
-    
+
     return 0;
 }
 
@@ -541,3 +529,4 @@ AVFilter ff_vf_procamp_vaapi = {
     .priv_class    = &procamp_vaapi_class,
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
 };
+
