@@ -31,7 +31,7 @@
 #include "vaapi_vpp.h"
 
 typedef struct ScaleVAAPIContext {
-    VPPVAAPIContext *vpp_ctx;
+    VAAPIVPPContext *vpp_ctx;
     char *w_expr;      // width expression string
     char *h_expr;      // height expression string
     char *output_format_string;
@@ -112,7 +112,7 @@ static av_cold int scale_vaapi_init(AVFilterContext *avctx)
 {
     ScaleVAAPIContext *ctx = avctx->priv;
 
-    ctx->vpp_ctx = av_mallocz(sizeof(VPPVAAPIContext));
+    ctx->vpp_ctx = av_mallocz(sizeof(VAAPIVPPContext));
     if (!ctx->vpp_ctx)
         return AVERROR(ENOMEM);
     vaapi_vpp_init(ctx->vpp_ctx);
