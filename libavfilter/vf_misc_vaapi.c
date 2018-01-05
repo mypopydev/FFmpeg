@@ -50,7 +50,7 @@ static int misc_vaapi_config_input(AVFilterLink *inlink)
     AVFilterContext *avctx = inlink->dst;
     MiscVAAPIContext *ctx = avctx->priv;
 
-    return vaapi_vpp_config_input(ctx->vpp_ctx, inlink);
+    return ff_vaapi_vpp_config_input(ctx->vpp_ctx, inlink);
 }
 
 static int misc_vaapi_build_filter_params(AVFilterContext *avctx)
@@ -81,11 +81,11 @@ static int misc_vaapi_build_filter_params(AVFilterContext *avctx)
 
         denoise.type  = VAProcFilterNoiseReduction;
         denoise.value =  av_clip(ctx->denoise,
-                            denoise_caps.range.min_value,
-                            denoise_caps.range.max_value);
+                                 denoise_caps.range.min_value,
+                                 denoise_caps.range.max_value);
         err = ff_vaapi_vpp_make_param_buffer(ctx->vpp_ctx,
-                                       VAProcFilterParameterBufferType,
-                                       &denoise, sizeof(denoise));
+                                             VAProcFilterParameterBufferType,
+                                             &denoise, sizeof(denoise));
         if (err < 0)
             return err;
     }
@@ -103,12 +103,12 @@ static int misc_vaapi_build_filter_params(AVFilterContext *avctx)
 
         sharpness.type  = VAProcFilterSharpening;
         sharpness.value =  av_clip(ctx->sharpness,
-                sharpness_caps.range.min_value,
-                sharpness_caps.range.max_value);
+                                   sharpness_caps.range.min_value,
+                                   sharpness_caps.range.max_value);
 
         err = ff_vaapi_vpp_make_param_buffer(ctx->vpp_ctx,
-                                       VAProcFilterParameterBufferType,
-                                       &sharpness, sizeof(sharpness));
+                                             VAProcFilterParameterBufferType,
+                                             &sharpness, sizeof(sharpness));
         if (err < 0)
             return err;
     }
@@ -125,7 +125,7 @@ static int misc_vaapi_config_output(AVFilterLink *outlink)
     ctx->vpp_ctx->output_width = avctx->inputs[0]->w;
     ctx->vpp_ctx->output_height = avctx->inputs[0]->h;
 
-    if (err = vaapi_vpp_config_output(ctx->vpp_ctx))
+    if (err = ff_vaapi_vpp_config_output(ctx->vpp_ctx))
         goto fail;
     outlink->w = inlink->w;
     outlink->h = inlink->h;
@@ -144,7 +144,6 @@ fail:
     return err;
 }
 
-
 static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 {
     AVFilterContext *avctx = inlink->dst;
@@ -161,7 +160,7 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     }
 
     av_assert0(ctx->vpp_ctx->num_filter_bufs + 1 <= VAProcFilterCount);
-    vaapi_vpp_filter_frame(ctx->vpp_ctx, input_frame, output_frame);
+    ff_vaapi_vpp_filter_frame(ctx->vpp_ctx, input_frame, output_frame);
     ff_vaapi_vpp_destroy_param_buffer(ctx->vpp_ctx);
     av_frame_copy_props(output_frame, input_frame);
     av_frame_free(&input_frame);
@@ -180,7 +179,7 @@ static av_cold int misc_vaapi_init(AVFilterContext *avctx)
     ctx->vpp_ctx = av_mallocz(sizeof(VAAPIVPPContext));
     if (!ctx->vpp_ctx)
         return AVERROR(ENOMEM);
-    vaapi_vpp_init(ctx->vpp_ctx);
+    ff_vaapi_vpp_init(ctx->vpp_ctx);
     ctx->vpp_ctx->output_format = AV_PIX_FMT_NONE;
     return 0;
 }
@@ -190,11 +189,10 @@ static av_cold void misc_vaapi_uninit(AVFilterContext *avctx)
     MiscVAAPIContext *ctx = avctx->priv;
     ff_vaapi_vpp_destroy_param_buffer(ctx->vpp_ctx);
     if (ctx->vpp_ctx->valid_ids == 1) {
-        vaapi_vpp_uninit(ctx->vpp_ctx);
+        ff_vaapi_vpp_uninit(ctx->vpp_ctx);
         av_free(ctx->vpp_ctx);
     }
 }
-
 
 #define OFFSET(x) offsetof(MiscVAAPIContext, x)
 #define FLAGS (AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM)

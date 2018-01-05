@@ -50,7 +50,7 @@ static int procamp_vaapi_config_input(AVFilterLink *inlink)
     AVFilterContext *avctx = inlink->dst;
     ProcampVAAPIContext *ctx = avctx->priv;
 
-    return vaapi_vpp_config_input(ctx->vpp_ctx, inlink);
+    return ff_vaapi_vpp_config_input(ctx->vpp_ctx, inlink);
 }
 
 static int procamp_vaapi_build_filter_params(AVFilterContext *avctx)
@@ -65,18 +65,18 @@ static int procamp_vaapi_build_filter_params(AVFilterContext *avctx)
     memset(&procamp_caps, 0, sizeof(procamp_caps));
 
     num_caps = VAProcColorBalanceCount;
-    vas = vaQueryVideoProcFilterCaps(ctx->vpp_ctx->hwctx->display, ctx->vpp_ctx->va_context, VAProcFilterColorBalance, &procamp_caps, &num_caps);
-
+    vas = vaQueryVideoProcFilterCaps(ctx->vpp_ctx->hwctx->display, ctx->vpp_ctx->va_context,
+                                     VAProcFilterColorBalance, &procamp_caps, &num_caps);
     if (vas != VA_STATUS_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Failed to Query procamp "
                "query caps: %d (%s).\n", vas, vaErrorStr(vas));
         return AVERROR(EIO);
     }
+
     procamp_params[0].type   = VAProcFilterColorBalance;
     procamp_params[0].attrib = VAProcColorBalanceBrightness;
     procamp_params[0].value  = 0;
-
-    if ( ctx->output_bright ) {
+    if (ctx->output_bright) {
         procamp_params[0].value = av_clip(ctx->output_bright,
             procamp_caps[VAProcColorBalanceBrightness-1].range.min_value,
             procamp_caps[VAProcColorBalanceBrightness-1].range.max_value);
@@ -85,8 +85,7 @@ static int procamp_vaapi_build_filter_params(AVFilterContext *avctx)
     procamp_params[1].type   = VAProcFilterColorBalance;
     procamp_params[1].attrib = VAProcColorBalanceContrast;
     procamp_params[1].value  = 1;
-
-    if ( ctx->output_contrast != 1 ) {
+    if (ctx->output_contrast != 1) {
         procamp_params[1].value = av_clip(ctx->output_contrast,
             procamp_caps[VAProcColorBalanceContrast-1].range.min_value,
             procamp_caps[VAProcColorBalanceContrast-1].range.max_value);
@@ -95,8 +94,7 @@ static int procamp_vaapi_build_filter_params(AVFilterContext *avctx)
     procamp_params[2].type   = VAProcFilterColorBalance;
     procamp_params[2].attrib = VAProcColorBalanceHue;
     procamp_params[2].value  = 0;
-
-    if ( ctx->output_hue) {
+    if (ctx->output_hue) {
         procamp_params[2].value = av_clip(ctx->output_hue,
             procamp_caps[VAProcColorBalanceHue-1].range.min_value,
             procamp_caps[VAProcColorBalanceHue-1].range.max_value);
@@ -105,16 +103,15 @@ static int procamp_vaapi_build_filter_params(AVFilterContext *avctx)
     procamp_params[3].type   = VAProcFilterColorBalance;
     procamp_params[3].attrib = VAProcColorBalanceSaturation;
     procamp_params[3].value  = 1;
-
-    if ( ctx->output_saturation != 1 ) {
+    if (ctx->output_saturation != 1) {
         procamp_params[3].value = av_clip(ctx->output_saturation,
             procamp_caps[VAProcColorBalanceSaturation-1].range.min_value,
             procamp_caps[VAProcColorBalanceSaturation-1].range.max_value);
     }
 
     return ff_vaapi_vpp_make_param_array(ctx->vpp_ctx,
-                VAProcFilterParameterBufferType, 4,
-                &procamp_params, sizeof(procamp_params));
+                                         VAProcFilterParameterBufferType, 4,
+                                         &procamp_params, sizeof(procamp_params));
 }
 
 static int procamp_vaapi_config_output(AVFilterLink *outlink)
@@ -127,7 +124,7 @@ static int procamp_vaapi_config_output(AVFilterLink *outlink)
     ctx->vpp_ctx->output_width = avctx->inputs[0]->w;
     ctx->vpp_ctx->output_height = avctx->inputs[0]->h;
 
-    if (err = vaapi_vpp_config_output(ctx->vpp_ctx))
+    if (err = ff_vaapi_vpp_config_output(ctx->vpp_ctx))
         goto fail;
     outlink->w = inlink->w;
     outlink->h = inlink->h;
@@ -163,7 +160,7 @@ static int procamp_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame
     }
 
     av_assert0(ctx->vpp_ctx->num_filter_bufs + 1 <= VAProcFilterCount);
-    vaapi_vpp_filter_frame(ctx->vpp_ctx, input_frame, output_frame);
+    ff_vaapi_vpp_filter_frame(ctx->vpp_ctx, input_frame, output_frame);
 
     av_frame_copy_props(output_frame, input_frame);
     av_frame_free(&input_frame);
@@ -182,7 +179,7 @@ static av_cold int procamp_vaapi_init(AVFilterContext *avctx)
     ctx->vpp_ctx = av_mallocz(sizeof(VAAPIVPPContext));
     if (!ctx->vpp_ctx)
         return AVERROR(ENOMEM);
-    vaapi_vpp_init(ctx->vpp_ctx);
+    ff_vaapi_vpp_init(ctx->vpp_ctx);
     ctx->vpp_ctx->output_format = AV_PIX_FMT_NONE;
     return 0;
 }
@@ -192,11 +189,10 @@ static av_cold void procamp_vaapi_uninit(AVFilterContext *avctx)
     ProcampVAAPIContext *ctx = avctx->priv;
     if (ctx->vpp_ctx->valid_ids == 1) {
         ff_vaapi_vpp_destroy_param_buffer(ctx->vpp_ctx);
-        vaapi_vpp_uninit(ctx->vpp_ctx);
+        ff_vaapi_vpp_uninit(ctx->vpp_ctx);
         av_free(ctx->vpp_ctx);
     }
 }
-
 
 #define OFFSET(x) offsetof(ProcampVAAPIContext, x)
 #define FLAGS (AV_OPT_FLAG_VIDEO_PARAM)

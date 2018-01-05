@@ -48,7 +48,7 @@ static int scale_vaapi_config_input(AVFilterLink *inlink)
     AVFilterContext *avctx = inlink->dst;
     ScaleVAAPIContext *ctx = avctx->priv;
 
-    return vaapi_vpp_config_input(ctx->vpp_ctx, inlink);
+    return ff_vaapi_vpp_config_input(ctx->vpp_ctx, inlink);
 }
 
 static int scale_vaapi_config_output(AVFilterLink *outlink)
@@ -61,9 +61,10 @@ static int scale_vaapi_config_output(AVFilterLink *outlink)
     if ((err = ff_scale_eval_dimensions(ctx,
                                         ctx->w_expr, ctx->h_expr,
                                         inlink, outlink,
-                                        &ctx->vpp_ctx->output_width, &ctx->vpp_ctx->output_height)) < 0)
+                                        &ctx->vpp_ctx->output_width,
+                                        &ctx->vpp_ctx->output_height)) < 0)
         goto fail;
-    if (err = vaapi_vpp_config_output(ctx->vpp_ctx))
+    if (err = ff_vaapi_vpp_config_output(ctx->vpp_ctx))
         goto fail;
 
     outlink->w = ctx->vpp_ctx->output_width;
@@ -95,7 +96,7 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
         goto fail;
     }
 
-    vaapi_vpp_filter_frame(ctx->vpp_ctx, input_frame, output_frame);
+    ff_vaapi_vpp_filter_frame(ctx->vpp_ctx, input_frame, output_frame);
 
     av_frame_copy_props(output_frame, input_frame);
     av_frame_free(&input_frame);
@@ -114,7 +115,7 @@ static av_cold int scale_vaapi_init(AVFilterContext *avctx)
     ctx->vpp_ctx = av_mallocz(sizeof(VAAPIVPPContext));
     if (!ctx->vpp_ctx)
         return AVERROR(ENOMEM);
-    vaapi_vpp_init(ctx->vpp_ctx);
+    ff_vaapi_vpp_init(ctx->vpp_ctx);
 
     if (ctx->output_format_string) {
         ctx->vpp_ctx->output_format = av_get_pix_fmt(ctx->output_format_string);
@@ -135,7 +136,7 @@ static av_cold void scale_vaapi_uninit(AVFilterContext *avctx)
     ScaleVAAPIContext *ctx = avctx->priv;
 
     if (ctx->vpp_ctx->valid_ids == 1) {
-        vaapi_vpp_uninit(ctx->vpp_ctx);
+        ff_vaapi_vpp_uninit(ctx->vpp_ctx);
         av_free(ctx->vpp_ctx);
     }
 }

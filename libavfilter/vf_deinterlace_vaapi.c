@@ -80,7 +80,7 @@ static int deint_vaapi_config_input(AVFilterLink *inlink)
     AVFilterContext   *avctx = inlink->dst;
     DeintVAAPIContext *ctx = avctx->priv;
 
-    return vaapi_vpp_config_input(ctx->vpp_ctx, inlink);
+    return ff_vaapi_vpp_config_input(ctx->vpp_ctx, inlink);
 }
 
 static int deint_vaapi_build_filter_params(AVFilterContext *avctx)
@@ -168,7 +168,7 @@ static int deint_vaapi_config_output(AVFilterLink *outlink)
     ctx->vpp_ctx->output_width = avctx->inputs[0]->w;
     ctx->vpp_ctx->output_height = avctx->inputs[0]->h;
 
-    if (err = vaapi_vpp_config_output(ctx->vpp_ctx))
+    if (err = ff_vaapi_vpp_config_output(ctx->vpp_ctx))
         goto fail;
     err = deint_vaapi_build_filter_params(avctx);
     if (err < 0)
@@ -367,7 +367,7 @@ static av_cold int deint_vaapi_init(AVFilterContext *avctx)
     ctx->vpp_ctx = av_mallocz(sizeof(VAAPIVPPContext));
     if (!ctx->vpp_ctx)
         return AVERROR(ENOMEM);
-    vaapi_vpp_init(ctx->vpp_ctx);
+    ff_vaapi_vpp_init(ctx->vpp_ctx);
     ctx->vpp_ctx->output_format = AV_PIX_FMT_NONE;
 
     return 0;
@@ -378,7 +378,7 @@ static av_cold void deint_vaapi_uninit(AVFilterContext *avctx)
     DeintVAAPIContext *ctx = avctx->priv;
 
     if (ctx->vpp_ctx->valid_ids == 1) {
-        vaapi_vpp_uninit(ctx->vpp_ctx);
+        ff_vaapi_vpp_uninit(ctx->vpp_ctx);
         av_free(ctx->vpp_ctx);
     }
 }
