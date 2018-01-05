@@ -46,17 +46,17 @@ int ff_vaapi_vpp_query_formats(AVFilterContext *avctx)
 }
 
 int ff_vaapi_vpp_make_param_buffer(VAAPIVPPContext *ctx,
-                                      int type,
-                                      const void *data,
-                                      size_t size)
+                                   int type,
+                                   const void *data,
+                                   size_t size)
 {
     return ff_vaapi_vpp_make_param_array(ctx, type, 1, data, size);
 }
 
 int ff_vaapi_vpp_make_param_array(VAAPIVPPContext *ctx,
-                                      int type, size_t count,
-                                      const void *data,
-                                      size_t size)
+                                  int type, size_t count,
+                                  const void *data,
+                                  size_t size)
 {
     VAStatus vas;
     VABufferID buffer;
@@ -227,7 +227,7 @@ fail:
     return err;
 }
 
-int vaapi_proc_colour_standard(enum AVColorSpace av_cs)
+int ff_vaapi_proc_colour_standard(enum AVColorSpace av_cs)
 {
     switch(av_cs) {
 #define CS(av, va) case AVCOL_SPC_ ## av: return VAProcColorStandard ## va;
@@ -314,8 +314,6 @@ fail_after_render:
     return err;
 }
 
-
-
 int vaapi_vpp_filter_frame(VAAPIVPPContext *ctx, AVFrame *input_frame, AVFrame *output_frame)
 {
     VASurfaceID input_surface, output_surface;
@@ -352,7 +350,7 @@ int vaapi_vpp_filter_frame(VAAPIVPPContext *ctx, AVFrame *input_frame, AVFrame *
     params.surface = input_surface;
     params.surface_region = &input_region;
     params.surface_color_standard =
-        vaapi_proc_colour_standard(input_frame->colorspace);
+        ff_vaapi_proc_colour_standard(input_frame->colorspace);
 
     params.output_region = 0;
     params.output_background_color = 0xff000000;

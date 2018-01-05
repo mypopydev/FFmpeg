@@ -80,7 +80,6 @@ fail:
     return err;
 }
 
-
 static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 {
     AVFilterContext *avctx = inlink->dst;

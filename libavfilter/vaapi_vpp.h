@@ -54,14 +54,14 @@ typedef struct VAAPIVPPContext {
 int ff_vaapi_vpp_query_formats(AVFilterContext *avctx);
 
 int ff_vaapi_vpp_make_param_buffer(VAAPIVPPContext *ctx,
-                                      int type,
-                                      const void *data,
-                                      size_t size);
+                                   int type,
+                                   const void *data,
+                                   size_t size);
 
 int ff_vaapi_vpp_make_param_array(VAAPIVPPContext *ctx,
-                                      int type, size_t count,
-                                      const void *data,
-                                      size_t size);
+                                  int type, size_t count,
+                                  const void *data,
+                                  size_t size);
 
 int vaapi_vpp_output_surface_ready(VAAPIVPPContext *ctx, VASurfaceID output_surface);
 
@@ -79,9 +79,7 @@ void vaapi_vpp_uninit(VAAPIVPPContext *ctx);
 
 int vaapi_vpp_config_input(VAAPIVPPContext *ctx, AVFilterLink *inlink);
 
-int vaapi_vpp_config_input1(VAAPIVPPContext *ctx, AVFilterLink *inlink);
-
 int vaapi_vpp_config_output(VAAPIVPPContext *ctx);
 
-int vaapi_proc_colour_standard(enum AVColorSpace av_cs);
+int ff_vaapi_proc_colour_standard(enum AVColorSpace av_cs);
 #endif
