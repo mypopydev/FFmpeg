@@ -42,7 +42,7 @@ typedef struct MiscVAAPIContext {
 
 static int misc_vaapi_query_formats(AVFilterContext *avctx)
 {
-    return ff_vaapi_query_formats(avctx);
+    return ff_vaapi_vpp_query_formats(avctx);
 }
 
 static int misc_vaapi_config_input(AVFilterLink *inlink)

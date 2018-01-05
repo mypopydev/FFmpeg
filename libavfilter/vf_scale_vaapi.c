@@ -40,7 +40,7 @@ typedef struct ScaleVAAPIContext {
 
 static int scale_vaapi_query_formats(AVFilterContext *avctx)
 {
-    return ff_vaapi_query_formats(avctx);
+    return ff_vaapi_vpp_query_formats(avctx);
 }
 
 static int scale_vaapi_config_input(AVFilterLink *inlink)

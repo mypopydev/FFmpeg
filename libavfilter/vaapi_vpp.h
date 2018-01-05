@@ -51,7 +51,7 @@ typedef struct VAAPIVPPContext {
     VABufferID         filter_bufs[VAProcFilterCount];
 } VAAPIVPPContext;
 
-int ff_vaapi_query_formats(AVFilterContext *avctx);
+int ff_vaapi_vpp_query_formats(AVFilterContext *avctx);
 
 int ff_vaapi_vpp_make_param_buffer(VAAPIVPPContext *ctx,
                                       int type,

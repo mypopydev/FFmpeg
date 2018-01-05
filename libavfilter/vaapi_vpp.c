@@ -28,7 +28,7 @@
 
 #include "libavutil/pixdesc.h"
 
-int ff_vaapi_query_formats(AVFilterContext *avctx)
+int ff_vaapi_vpp_query_formats(AVFilterContext *avctx)
 {
     int err;
     enum AVPixelFormat pix_fmts[] = {

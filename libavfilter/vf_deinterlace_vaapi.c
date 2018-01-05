@@ -72,7 +72,7 @@ static const char *deint_vaapi_mode_name(int mode)
 
 static int deint_vaapi_query_formats(AVFilterContext *avctx)
 {
-    return ff_vaapi_query_formats(avctx);
+    return ff_vaapi_vpp_query_formats(avctx);
 }
 
 static int deint_vaapi_config_input(AVFilterLink *inlink)
@@ -133,7 +133,7 @@ static int deint_vaapi_build_filter_params(AVFilterContext *avctx)
         return AVERROR(EIO);
     vas = vaQueryVideoProcPipelineCaps(ctx->vpp_ctx->hwctx->display,
                                        ctx->vpp_ctx->va_context,
-                                       &ctx->vpp_ctx->filter_bufs, 1,
+                                       ctx->vpp_ctx->filter_bufs, 1,
                                        &ctx->pipeline_caps);
     if (vas != VA_STATUS_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Failed to query pipeline "
@@ -206,8 +206,6 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     VAProcPipelineParameterBuffer params;
     VAProcFilterParameterBufferDeinterlacing filter_params;
     VARectangle input_region;
-    VABufferID params_id;
-    VAStatus vas;
     int err, i, field, current_frame_index;
 
     av_log(avctx, AV_LOG_DEBUG, "Filter input: %s, %ux%u (%"PRId64").\n",
