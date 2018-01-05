@@ -102,7 +102,7 @@ static int vaapi_vpp_pipeline_uninit(VAAPIVPPContext *ctx)
     return 0;
 }
 
-int vaapi_vpp_config_input(VAAPIVPPContext *ctx, AVFilterLink *inlink)
+int ff_vaapi_vpp_config_input(VAAPIVPPContext *ctx, AVFilterLink *inlink)
 {
     vaapi_vpp_pipeline_uninit(ctx);
 
@@ -112,7 +112,7 @@ int vaapi_vpp_config_input(VAAPIVPPContext *ctx, AVFilterLink *inlink)
     return 0;
 }
 
-int vaapi_vpp_config_output(VAAPIVPPContext *ctx)
+int ff_vaapi_vpp_config_output(VAAPIVPPContext *ctx)
 {
     AVVAAPIHWConfig *hwconfig = NULL;
     AVHWFramesConstraints *constraints = NULL;
@@ -314,7 +314,7 @@ fail_after_render:
     return err;
 }
 
-int vaapi_vpp_filter_frame(VAAPIVPPContext *ctx, AVFrame *input_frame, AVFrame *output_frame)
+int ff_vaapi_vpp_filter_frame(VAAPIVPPContext *ctx, AVFrame *input_frame, AVFrame *output_frame)
 {
     VASurfaceID input_surface, output_surface;
     VAProcPipelineParameterBuffer params;
@@ -376,7 +376,7 @@ int vaapi_vpp_filter_frame(VAAPIVPPContext *ctx, AVFrame *input_frame, AVFrame *
     return 0;
 }
 
-av_cold int vaapi_vpp_init(VAAPIVPPContext *ctx)
+av_cold int ff_vaapi_vpp_init(VAAPIVPPContext *ctx)
 {
     int i;
 
@@ -391,7 +391,7 @@ av_cold int vaapi_vpp_init(VAAPIVPPContext *ctx)
     return 0;
 }
 
-av_cold void vaapi_vpp_uninit(VAAPIVPPContext *ctx)
+av_cold void ff_vaapi_vpp_uninit(VAAPIVPPContext *ctx)
 {
     if (ctx->valid_ids == 1)
         vaapi_vpp_pipeline_uninit(ctx);

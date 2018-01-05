@@ -16,8 +16,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVFILTER_VF_VPP_VAAPI_H
-#define AVFILTER_VF_VPP_VAAPI_H
+#ifndef AVFILTER_VAAPI_VPP_H
+#define AVFILTER_VAAPI_VPP_H
 
 #include <va/va.h>
 #include <va/va_vpp.h>
@@ -71,15 +71,16 @@ int vaapi_vpp_apply_pipeline_param(VAAPIVPPContext *ctx);
 
 int ff_vaapi_vpp_destroy_param_buffer(VAAPIVPPContext *ctx);
 
-int vaapi_vpp_init(VAAPIVPPContext *ctx);
+int ff_vaapi_vpp_init(VAAPIVPPContext *ctx);
 
-int vaapi_vpp_filter_frame(VAAPIVPPContext *ctx, AVFrame *input_frame, AVFrame *output_frame);
+int ff_vaapi_vpp_filter_frame(VAAPIVPPContext *ctx, AVFrame *input_frame, AVFrame *output_frame);
 
-void vaapi_vpp_uninit(VAAPIVPPContext *ctx);
+void ff_vaapi_vpp_uninit(VAAPIVPPContext *ctx);
 
-int vaapi_vpp_config_input(VAAPIVPPContext *ctx, AVFilterLink *inlink);
+int ff_vaapi_vpp_config_input(VAAPIVPPContext *ctx, AVFilterLink *inlink);
 
-int vaapi_vpp_config_output(VAAPIVPPContext *ctx);
+int ff_vaapi_vpp_config_output(VAAPIVPPContext *ctx);
 
 int ff_vaapi_proc_colour_standard(enum AVColorSpace av_cs);
-#endif
+
+#endif /* AVFILTER_VAAPI_VPP_H */
