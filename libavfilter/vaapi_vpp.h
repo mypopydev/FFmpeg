@@ -26,10 +26,10 @@ typedef struct VAAPIVPPContext {
 
     //int (*config_output)(AVFilterLink *outlink);
 
-    int (*render_picture)(VAAPIVPPContext *vppctx,
+    /*int (*render_picture)(VAAPIVPPContext *vppctx,
                           VAProcPipelineParameterBuffer *params,
                           AVFrame *input_frame,
-                          AVFrame *output_frame);
+                          AVFrame *output_frame);*/
 
     //int (*colour_standard)(enum AVColorSpace av_cs);
 
@@ -38,21 +38,21 @@ typedef struct VAAPIVPPContext {
     void *priv;
 } VAAPIVPPContext;
 
-void vaapi_vpp_ctx_init(VAAPIVPPContext *vppctx);
+void vaapi_vpp_ctx_init(AVFilterContext *avctx, VAAPIVPPContext *ctx);
 
-void vaapi_vpp_ctx_uninit(VAAPIVPPContext *vppctx);
+void vaapi_vpp_ctx_uninit(AVFilterContext *avctx, VAAPIVPPContext *ctx);
 
 int vaapi_vpp_query_formats(AVFilterContext *avctx);
 
-//int vaapi_vpp_pipeline_uninit(VAAPIVPPContext *vppctx);
+int vaapi_vpp_pipeline_uninit(VAAPIVPPContext *ctx);
 
-int vaapi_vpp_config_input(AVFilterLink *inlink);
+int vaapi_vpp_config_input(AVFilterLink *inlink, VAAPIVPPContext *ctx);
 
-int vaapi_vpp_config_output(AVFilterLink *outlink);
+int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx);
 
 int vaapi_vpp_colour_standard(enum AVColorSpace av_cs);
 
-//int vaapi_vpp_render_picture(VAAPIVPPContext *vppctx, VAProcPipelineParameterBuffer *params, AVFrame *input_frame, AVFrame *output_frame);
+int vaapi_vpp_render_picture(VAAPIVPPContext *ctx, VAProcPipelineParameterBuffer *params, AVFrame *input_frame, AVFrame *output_frame);
 
 //int vaapi_vpp_init(AVFilterContext *avctx);
 

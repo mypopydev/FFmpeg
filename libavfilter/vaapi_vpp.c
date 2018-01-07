@@ -69,12 +69,12 @@ int vaapi_vpp_pipeline_uninit(VAAPIVPPContext *ctx)
     return 0;
 }
 
-int vaapi_vpp_config_input(AVFilterLink *inlink)
+int vaapi_vpp_config_input(AVFilterLink *inlink, VAAPIVPPContext *ctx)
 {
     AVFilterContext *avctx = inlink->dst;
-    ScaleVAAPIContext *ctx = avctx->priv;
 
-    //scale_vaapi_pipeline_uninit(ctx);
+    if (ctx->pipeline_uninit)
+        ctx->pipeline_uninit(avctx);
 
     if (!inlink->hw_frames_ctx) {
         av_log(avctx, AV_LOG_ERROR, "A hardware frames reference is "
@@ -88,18 +88,18 @@ int vaapi_vpp_config_input(AVFilterLink *inlink)
     return 0;
 }
 
-int vaapi_vpp_config_output(AVFilterLink *outlink)
+int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
 {
     AVFilterLink *inlink = outlink->src->inputs[0];
     AVFilterContext *avctx = outlink->src;
-    ScaleVAAPIContext *ctx = avctx->priv;
     AVVAAPIHWConfig *hwconfig = NULL;
     AVHWFramesConstraints *constraints = NULL;
     AVVAAPIFramesContext *va_frames;
     VAStatus vas;
     int err, i;
 
-    //scale_vaapi_pipeline_uninit(ctx);
+    if (ctx->pipeline_uninit)
+        ctx->pipeline_uninit(avctx);
 
     av_assert0(ctx->input_frames);
     ctx->device_ref = av_buffer_ref(ctx->input_frames->device_ref);
@@ -143,12 +143,13 @@ int vaapi_vpp_config_output(AVFilterLink *outlink)
             goto fail;
         }
     }
-
+/*
     if ((err = ff_scale_eval_dimensions(ctx,
                                         ctx->w_expr, ctx->h_expr,
                                         inlink, outlink,
                                         &ctx->output_width, &ctx->output_height)) < 0)
         goto fail;
+*/
 
     if (ctx->output_width  < constraints->min_width  ||
         ctx->output_height < constraints->min_height ||
@@ -224,7 +225,7 @@ fail:
     return err;
 }
 
-int vaapi_vpp_colour_standard(enum AVColorSpace av_cs);
+int vaapi_vpp_colour_standard(enum AVColorSpace av_cs)
 {
     switch(av_cs) {
 #define CS(av, va) case AVCOL_SPC_ ## av: return VAProcColorStandard ## va;
@@ -247,11 +248,12 @@ int vaapi_vpp_render_picture(VAAPIVPPContext *ctx,
     VARectangle input_region;
     VAStatus vas;
     int err;
+    VASurfaceID input_surface, output_surface;
 
     vas = vaBeginPicture(ctx->hwctx->display,
                          ctx->va_context, output_surface);
     if (vas != VA_STATUS_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "Failed to attach new picture: "
+        av_log(ctx, AV_LOG_ERROR, "Failed to attach new picture: "
                "%d (%s).\n", vas, vaErrorStr(vas));
         err = AVERROR(EIO);
         goto fail;
@@ -261,18 +263,18 @@ int vaapi_vpp_render_picture(VAAPIVPPContext *ctx,
                          VAProcPipelineParameterBufferType,
                          sizeof(*params), 1, params, &params_id);
     if (vas != VA_STATUS_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "Failed to create parameter buffer: "
+        av_log(ctx, AV_LOG_ERROR, "Failed to create parameter buffer: "
                "%d (%s).\n", vas, vaErrorStr(vas));
         err = AVERROR(EIO);
         goto fail_after_begin;
     }
-    av_log(avctx, AV_LOG_DEBUG, "Pipeline parameter buffer is %#x.\n",
+    av_log(ctx, AV_LOG_DEBUG, "Pipeline parameter buffer is %#x.\n",
            params_id);
 
     vas = vaRenderPicture(ctx->hwctx->display, ctx->va_context,
                           &params_id, 1);
     if (vas != VA_STATUS_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "Failed to render parameter buffer: "
+        av_log(ctx, AV_LOG_ERROR, "Failed to render parameter buffer: "
                "%d (%s).\n", vas, vaErrorStr(vas));
         err = AVERROR(EIO);
         goto fail_after_begin;
@@ -280,7 +282,7 @@ int vaapi_vpp_render_picture(VAAPIVPPContext *ctx,
 
     vas = vaEndPicture(ctx->hwctx->display, ctx->va_context);
     if (vas != VA_STATUS_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "Failed to start picture processing: "
+        av_log(ctx, AV_LOG_ERROR, "Failed to start picture processing: "
                "%d (%s).\n", vas, vaErrorStr(vas));
         err = AVERROR(EIO);
         goto fail_after_render;
@@ -290,7 +292,7 @@ int vaapi_vpp_render_picture(VAAPIVPPContext *ctx,
         AV_VAAPI_DRIVER_QUIRK_RENDER_PARAM_BUFFERS) {
         vas = vaDestroyBuffer(ctx->hwctx->display, params_id);
         if (vas != VA_STATUS_SUCCESS) {
-            av_log(avctx, AV_LOG_ERROR, "Failed to free parameter buffer: "
+            av_log(ctx, AV_LOG_ERROR, "Failed to free parameter buffer: "
                    "%d (%s).\n", vas, vaErrorStr(vas));
             // And ignore.
         }
@@ -312,34 +314,19 @@ fail:
     return err;
 }
 
-int vaapi_vpp_init(AVFilterContext *avctx)
+void vaapi_vpp_ctx_init(AVFilterContext *avctx, VAAPIVPPContext *ctx)
 {
-    ScaleVAAPIContext *ctx = avctx->priv;
-
     ctx->va_config  = VA_INVALID_ID;
     ctx->va_context = VA_INVALID_ID;
     ctx->valid_ids  = 1;
 
-    if (ctx->output_format_string) {
-        ctx->output_format = av_get_pix_fmt(ctx->output_format_string);
-        if (ctx->output_format == AV_PIX_FMT_NONE) {
-            av_log(ctx, AV_LOG_ERROR, "Invalid output format.\n");
-            return AVERROR(EINVAL);
-        }
-    } else {
-        // Use the input format once that is configured.
-        ctx->output_format = AV_PIX_FMT_NONE;
-    }
-
     return 0;
 }
 
-void vaapi_vpp_uninit(AVFilterContext *avctx)
+void vaapi_vpp_ctx_uninit(AVFilterContext *avctx, VAAPIVPPContext *ctx)
 {
-    ScaleVAAPIContext *ctx = avctx->priv;
-
-    if (ctx->valid_ids)
-        scale_vaapi_pipeline_uninit(avctx);
+    if (ctx->valid_ids && ctx->pipeline_uninit)
+        ctx->pipeline_uninit(avctx);
 
     av_buffer_unref(&ctx->input_frames_ref);
     av_buffer_unref(&ctx->output_frames_ref);
