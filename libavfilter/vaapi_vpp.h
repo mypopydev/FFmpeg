@@ -34,11 +34,9 @@ typedef struct VAAPIVPPContext {
     //int (*colour_standard)(enum AVColorSpace av_cs);
 
     //int (*query_formats)(AVFilterContext *avctx);
-
-    void *priv;
 } VAAPIVPPContext;
 
-void vaapi_vpp_ctx_init(AVFilterContext *avctx, VAAPIVPPContext *ctx);
+void vaapi_vpp_ctx_init(VAAPIVPPContext *ctx);
 
 void vaapi_vpp_ctx_uninit(AVFilterContext *avctx, VAAPIVPPContext *ctx);
 

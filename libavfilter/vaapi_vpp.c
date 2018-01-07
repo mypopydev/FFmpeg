@@ -90,7 +90,6 @@ int vaapi_vpp_config_input(AVFilterLink *inlink, VAAPIVPPContext *ctx)
 
 int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
 {
-    AVFilterLink *inlink = outlink->src->inputs[0];
     AVFilterContext *avctx = outlink->src;
     AVVAAPIHWConfig *hwconfig = NULL;
     AVHWFramesConstraints *constraints = NULL;
@@ -109,7 +108,7 @@ int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
     vas = vaCreateConfig(ctx->hwctx->display, VAProfileNone,
                          VAEntrypointVideoProc, 0, 0, &ctx->va_config);
     if (vas != VA_STATUS_SUCCESS) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to create processing pipeline "
+        av_log(avctx, AV_LOG_ERROR, "Failed to create processing pipeline "
                "config: %d (%s).\n", vas, vaErrorStr(vas));
         err = AVERROR(EIO);
         goto fail;
@@ -137,7 +136,7 @@ int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
                 break;
         }
         if (constraints->valid_sw_formats[i] == AV_PIX_FMT_NONE) {
-            av_log(ctx, AV_LOG_ERROR, "Hardware does not support output "
+            av_log(avctx, AV_LOG_ERROR, "Hardware does not support output "
                    "format %s.\n", av_get_pix_fmt_name(ctx->output_format));
             err = AVERROR(EINVAL);
             goto fail;
@@ -155,7 +154,7 @@ int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
         ctx->output_height < constraints->min_height ||
         ctx->output_width  > constraints->max_width  ||
         ctx->output_height > constraints->max_height) {
-        av_log(ctx, AV_LOG_ERROR, "Hardware does not support scaling to "
+        av_log(avctx, AV_LOG_ERROR, "Hardware does not support scaling to "
                "size %dx%d (constraints: width %d-%d height %d-%d).\n",
                ctx->output_width, ctx->output_height,
                constraints->min_width,  constraints->max_width,
@@ -166,7 +165,7 @@ int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
 
     ctx->output_frames_ref = av_hwframe_ctx_alloc(ctx->device_ref);
     if (!ctx->output_frames_ref) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to create HW frame context "
+        av_log(avctx, AV_LOG_ERROR, "Failed to create HW frame context "
                "for output.\n");
         err = AVERROR(ENOMEM);
         goto fail;
@@ -186,7 +185,7 @@ int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
 
     err = av_hwframe_ctx_init(ctx->output_frames_ref);
     if (err < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to initialise VAAPI frame "
+        av_log(avctx, AV_LOG_ERROR, "Failed to initialise VAAPI frame "
                "context for output: %d\n", err);
         goto fail;
     }
@@ -200,7 +199,7 @@ int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
                           va_frames->surface_ids, va_frames->nb_surfaces,
                           &ctx->va_context);
     if (vas != VA_STATUS_SUCCESS) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to create processing pipeline "
+        av_log(avctx, AV_LOG_ERROR, "Failed to create processing pipeline "
                "context: %d (%s).\n", vas, vaErrorStr(vas));
         return AVERROR(EIO);
     }
@@ -251,7 +250,6 @@ int vaapi_vpp_render_picture(VAAPIVPPContext *ctx,
                              AVFrame *output_frame)
 {
     VABufferID params_id;
-    VARectangle input_region;
     VAStatus vas;
     int err;
     VASurfaceID output_surface;
@@ -324,13 +322,11 @@ fail:
     return err;
 }
 
-void vaapi_vpp_ctx_init(AVFilterContext *avctx, VAAPIVPPContext *ctx)
+void vaapi_vpp_ctx_init(VAAPIVPPContext *ctx)
 {
     ctx->va_config  = VA_INVALID_ID;
     ctx->va_context = VA_INVALID_ID;
     ctx->valid_ids  = 1;
-
-    return 0;
 }
 
 void vaapi_vpp_ctx_uninit(AVFilterContext *avctx, VAAPIVPPContext *ctx)
