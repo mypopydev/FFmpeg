@@ -306,10 +306,6 @@ int vaapi_vpp_render_picture(VAAPIVPPContext *ctx,
         }
     }
 
-    err = av_frame_copy_props(output_frame, input_frame);
-    if (err < 0)
-        goto fail;
-
     // We want to make sure that if vaBeginPicture has been called, we also
     // call vaRenderPicture and vaEndPicture.  These calls may well fail or
     // do something else nasty, but once we're in this failure case there
@@ -322,11 +318,14 @@ fail:
     return err;
 }
 
-void vaapi_vpp_ctx_init(VAAPIVPPContext *ctx)
+int vaapi_vpp_ctx_init(VAAPIVPPContext *ctx)
 {
-    ctx->va_config  = VA_INVALID_ID;
-    ctx->va_context = VA_INVALID_ID;
+    ctx->va_config     = VA_INVALID_ID;
+    ctx->va_context    = VA_INVALID_ID;
+    ctx->filter_buffer = VA_INVALID_ID;
     ctx->valid_ids  = 1;
+
+    return 0;
 }
 
 void vaapi_vpp_ctx_uninit(AVFilterContext *avctx, VAAPIVPPContext *ctx)
@@ -337,4 +336,6 @@ void vaapi_vpp_ctx_uninit(AVFilterContext *avctx, VAAPIVPPContext *ctx)
     av_buffer_unref(&ctx->input_frames_ref);
     av_buffer_unref(&ctx->output_frames_ref);
     av_buffer_unref(&ctx->device_ref);
+
+    av_free(ctx);
 }

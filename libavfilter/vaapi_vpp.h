@@ -34,8 +34,8 @@ typedef struct VAAPIVPPContext {
     AVHWFramesContext *output_frames;
 
     enum AVPixelFormat output_format;
-    int output_width;
-    int output_height;
+    int output_width;   // computed width
+    int output_height;  // computed height
 
     VABufferID         filter_buffer;
 
@@ -57,7 +57,7 @@ typedef struct VAAPIVPPContext {
     //int (*query_formats)(AVFilterContext *avctx);
 } VAAPIVPPContext;
 
-void vaapi_vpp_ctx_init(VAAPIVPPContext *ctx);
+int vaapi_vpp_ctx_init(VAAPIVPPContext *ctx);
 
 void vaapi_vpp_ctx_uninit(AVFilterContext *avctx, VAAPIVPPContext *ctx);
 
