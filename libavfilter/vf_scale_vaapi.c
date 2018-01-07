@@ -151,7 +151,7 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     params.pipeline_flags = 0;
     params.filter_flags = VA_FILTER_SCALING_HQ;
 
-    err = vaapi_vpp_render_picture(vpp_ctx, &params, input_frame, output_frame);
+    err = vaapi_vpp_render_picture(vpp_ctx, &params, output_surface);
     if (err < 0)
         goto fail;
 
@@ -176,12 +176,13 @@ fail:
 static av_cold int scale_vaapi_init(AVFilterContext *avctx)
 {
     ScaleVAAPIContext *ctx = avctx->priv;
+    VAAPIVPPContext *vpp_ctx;
 
     ctx->vpp_ctx = av_mallocz(sizeof(VAAPIVPPContext));
     if (!ctx->vpp_ctx)
         return AVERROR(ENOMEM);
 
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
+    vpp_ctx = ctx->vpp_ctx;
 
     vaapi_vpp_ctx_init(vpp_ctx);
     vpp_ctx->pipeline_uninit = scale_vaapi_pipeline_uninit;

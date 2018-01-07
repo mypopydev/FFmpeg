@@ -142,13 +142,6 @@ int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
             goto fail;
         }
     }
-/*
-    if ((err = ff_scale_eval_dimensions(ctx,
-                                        ctx->w_expr, ctx->h_expr,
-                                        inlink, outlink,
-                                        &ctx->output_width, &ctx->output_height)) < 0)
-        goto fail;
-*/
 
     if (ctx->output_width  < constraints->min_width  ||
         ctx->output_height < constraints->min_height ||
@@ -246,17 +239,11 @@ int vaapi_vpp_colour_standard(enum AVColorSpace av_cs)
 
 int vaapi_vpp_render_picture(VAAPIVPPContext *ctx,
                              VAProcPipelineParameterBuffer *params,
-                             AVFrame *input_frame,
-                             AVFrame *output_frame)
+                             VASurfaceID output_surface)
 {
     VABufferID params_id;
     VAStatus vas;
-    int err;
-    VASurfaceID output_surface;
-
-    output_surface = (VASurfaceID)(uintptr_t)output_frame->data[3];
-    av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for scale output.\n",
-           output_surface);
+    int err = 0;
 
     vas = vaBeginPicture(ctx->hwctx->display,
                          ctx->va_context, output_surface);

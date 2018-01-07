@@ -20,6 +20,8 @@
 #define AVFILTER_VAAPI_VPP_H
 
 typedef struct VAAPIVPPContext {
+    const AVClass *class;
+
     AVVAAPIDeviceContext *hwctx;
     AVBufferRef *device_ref;
 
@@ -43,18 +45,6 @@ typedef struct VAAPIVPPContext {
 
     int (*pipeline_uninit)(AVFilterContext *avctx);
 
-    //int (*config_input)(AVFilterLink *inlink);
-
-    //int (*config_output)(AVFilterLink *outlink);
-
-    /*int (*render_picture)(VAAPIVPPContext *vppctx,
-                          VAProcPipelineParameterBuffer *params,
-                          AVFrame *input_frame,
-                          AVFrame *output_frame);*/
-
-    //int (*colour_standard)(enum AVColorSpace av_cs);
-
-    //int (*query_formats)(AVFilterContext *avctx);
 } VAAPIVPPContext;
 
 int vaapi_vpp_ctx_init(VAAPIVPPContext *ctx);
@@ -71,9 +61,6 @@ int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx);
 
 int vaapi_vpp_colour_standard(enum AVColorSpace av_cs);
 
-int vaapi_vpp_render_picture(VAAPIVPPContext *ctx, VAProcPipelineParameterBuffer *params, AVFrame *input_frame, AVFrame *output_frame);
+int vaapi_vpp_render_picture(VAAPIVPPContext *ctx, VAProcPipelineParameterBuffer *params, VASurfaceID output_surface);
 
-//int vaapi_vpp_init(AVFilterContext *avctx);
-
-//void vaapi_vpp_uninit(AVFilterContext *avctx);
 #endif /* AVFILTER_VAAPI_VPP_H */
