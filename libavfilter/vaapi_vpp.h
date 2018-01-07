@@ -17,11 +17,34 @@ typedef struct VAAPIVPPContext {
     int output_height;
 
     VABufferID         filter_buffer;
+
+    int (*build_filter_params)(AVFilterContext *avctx);
+
+    int (*pipeline_uninit)(AVFilterContext *avctx);
+
+    //int (*config_input)(AVFilterLink *inlink);
+
+    //int (*config_output)(AVFilterLink *outlink);
+
+    int (*render_picture)(VAAPIVPPContext *vppctx,
+                          VAProcPipelineParameterBuffer *params,
+                          AVFrame *input_frame,
+                          AVFrame *output_frame);
+
+    //int (*colour_standard)(enum AVColorSpace av_cs);
+
+    //int (*query_formats)(AVFilterContext *avctx);
+
+    void *priv;
 } VAAPIVPPContext;
+
+void vaapi_vpp_ctx_init(VAAPIVPPContext *vppctx);
+
+void vaapi_vpp_ctx_uninit(VAAPIVPPContext *vppctx);
 
 int vaapi_vpp_query_formats(AVFilterContext *avctx);
 
-int vaapi_vpp_pipeline_uninit(ScaleVAAPIContext *ctx); /* No need */
+//int vaapi_vpp_pipeline_uninit(VAAPIVPPContext *vppctx);
 
 int vaapi_vpp_config_input(AVFilterLink *inlink);
 
@@ -29,9 +52,9 @@ int vaapi_vpp_config_output(AVFilterLink *outlink);
 
 int vaapi_vpp_colour_standard(enum AVColorSpace av_cs);
 
-int vaapi_vpp_render_picture(ctx, params, input_frame, output_frame);
+//int vaapi_vpp_render_picture(VAAPIVPPContext *vppctx, VAProcPipelineParameterBuffer *params, AVFrame *input_frame, AVFrame *output_frame);
 
-int vaapi_vpp_init(AVFilterContext *avctx);
+//int vaapi_vpp_init(AVFilterContext *avctx);
 
-void vaapi_vpp_uninit(AVFilterContext *avctx);
+//void vaapi_vpp_uninit(AVFilterContext *avctx);
 

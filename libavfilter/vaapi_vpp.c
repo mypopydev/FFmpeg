@@ -15,8 +15,13 @@ int vaapi_vpp_query_formats(AVFilterContext *avctx)
     return 0;
 }
 
-static int vaapi_vpp_pipeline_uninit(ScaleVAAPIContext *ctx)
+int vaapi_vpp_pipeline_uninit(VAAPIVPPContext *ctx)
 {
+    if (ctx->filter_buffer != VA_INVALID_ID) {
+        vaDestroyBuffer(ctx->hwctx->display, ctx->filter_buffer);
+        ctx->filter_buffer = VA_INVALID_ID;
+    }
+
     if (ctx->va_context != VA_INVALID_ID) {
         vaDestroyContext(ctx->hwctx->display, ctx->va_context);
         ctx->va_context = VA_INVALID_ID;
@@ -39,7 +44,7 @@ int vaapi_vpp_config_input(AVFilterLink *inlink)
     AVFilterContext *avctx = inlink->dst;
     ScaleVAAPIContext *ctx = avctx->priv;
 
-    scale_vaapi_pipeline_uninit(ctx);
+    //scale_vaapi_pipeline_uninit(ctx);
 
     if (!inlink->hw_frames_ctx) {
         av_log(avctx, AV_LOG_ERROR, "A hardware frames reference is "
@@ -64,8 +69,9 @@ int vaapi_vpp_config_output(AVFilterLink *outlink)
     VAStatus vas;
     int err, i;
 
-    scale_vaapi_pipeline_uninit(ctx);
+    //scale_vaapi_pipeline_uninit(ctx);
 
+    av_assert0(ctx->input_frames);
     ctx->device_ref = av_buffer_ref(ctx->input_frames->device_ref);
     ctx->hwctx = ((AVHWDeviceContext*)ctx->device_ref->data)->hwctx;
 
@@ -202,8 +208,16 @@ int vaapi_vpp_colour_standard(enum AVColorSpace av_cs);
     }
 }
 
-int vaapi_vpp_render_picture(ctx, params, input_frame, output_frame)
+int vaapi_vpp_render_picture(VAAPIVPPContext *ctx,
+                             VAProcPipelineParameterBuffer *params,
+                             AVFrame *input_frame,
+                             AVFrame *output_frame)
 {
+    VABufferID params_id;
+    VARectangle input_region;
+    VAStatus vas;
+    int err;
+
     vas = vaBeginPicture(ctx->hwctx->display,
                          ctx->va_context, output_surface);
     if (vas != VA_STATUS_SUCCESS) {
@@ -215,7 +229,7 @@ int vaapi_vpp_render_picture(ctx, params, input_frame, output_frame)
 
     vas = vaCreateBuffer(ctx->hwctx->display, ctx->va_context,
                          VAProcPipelineParameterBufferType,
-                         sizeof(params), 1, &params, &params_id);
+                         sizeof(*params), 1, params, &params_id);
     if (vas != VA_STATUS_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Failed to create parameter buffer: "
                "%d (%s).\n", vas, vaErrorStr(vas));
@@ -295,7 +309,7 @@ void vaapi_vpp_uninit(AVFilterContext *avctx)
     ScaleVAAPIContext *ctx = avctx->priv;
 
     if (ctx->valid_ids)
-        scale_vaapi_pipeline_uninit(ctx);
+        scale_vaapi_pipeline_uninit(avctx);
 
     av_buffer_unref(&ctx->input_frames_ref);
     av_buffer_unref(&ctx->output_frames_ref);
