@@ -208,6 +208,12 @@ int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
     outlink->w = ctx->output_width;
     outlink->h = ctx->output_height;
 
+    if (ctx->build_filter_params) {
+        err = ctx->build_filter_params(avctx);
+        if (err < 0)
+            goto fail;
+    }
+
     outlink->hw_frames_ctx = av_buffer_ref(ctx->output_frames_ref);
     if (!outlink->hw_frames_ctx) {
         err = AVERROR(ENOMEM);
@@ -248,7 +254,11 @@ int vaapi_vpp_render_picture(VAAPIVPPContext *ctx,
     VARectangle input_region;
     VAStatus vas;
     int err;
-    VASurfaceID input_surface, output_surface;
+    VASurfaceID output_surface;
+
+    output_surface = (VASurfaceID)(uintptr_t)output_frame->data[3];
+    av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for scale output.\n",
+           output_surface);
 
     vas = vaBeginPicture(ctx->hwctx->display,
                          ctx->va_context, output_surface);
