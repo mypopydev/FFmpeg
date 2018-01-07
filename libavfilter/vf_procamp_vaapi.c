@@ -76,8 +76,10 @@ static int procamp_vaapi_query_formats(AVFilterContext *avctx)
     return 0;
 }
 
-static int procamp_vaapi_pipeline_uninit(ProcampVAAPIContext *ctx)
+static int procamp_vaapi_pipeline_uninit(AVFilterContext *avctx)
 {
+    ProcampVAAPIContext *ctx =  avctx->priv;
+
     if (ctx->filter_buffer != VA_INVALID_ID) {
         vaDestroyBuffer(ctx->hwctx->display, ctx->filter_buffer);
         ctx->filter_buffer = VA_INVALID_ID;
@@ -105,7 +107,7 @@ static int procamp_vaapi_config_input(AVFilterLink *inlink)
     AVFilterContext *avctx = inlink->dst;
     ProcampVAAPIContext *ctx = avctx->priv;
 
-    procamp_vaapi_pipeline_uninit(ctx);
+    procamp_vaapi_pipeline_uninit(avctx);
 
     if (!inlink->hw_frames_ctx) {
         av_log(avctx, AV_LOG_ERROR, "A hardware frames reference is "
@@ -192,7 +194,7 @@ static int procamp_vaapi_config_output(AVFilterLink *outlink)
     VAStatus vas;
     int err, i;
 
-    procamp_vaapi_pipeline_uninit(ctx);
+    procamp_vaapi_pipeline_uninit(avctx);
 
     av_assert0(ctx->input_frames);
     ctx->device_ref = av_buffer_ref(ctx->input_frames->device_ref);
@@ -469,7 +471,7 @@ static av_cold void procamp_vaapi_uninit(AVFilterContext *avctx)
     ProcampVAAPIContext *ctx = avctx->priv;
 
     if (ctx->valid_ids)
-        procamp_vaapi_pipeline_uninit(ctx);
+        procamp_vaapi_pipeline_uninit(avctx);
 
     av_buffer_unref(&ctx->input_frames_ref);
     av_buffer_unref(&ctx->output_frames_ref);

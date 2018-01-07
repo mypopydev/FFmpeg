@@ -78,8 +78,10 @@ static int scale_vaapi_query_formats(AVFilterContext *avctx)
     return 0;
 }
 
-static int scale_vaapi_pipeline_uninit(ScaleVAAPIContext *ctx)
+static int scale_vaapi_pipeline_uninit(AVFilterContext *avctx)
 {
+    ScaleVAAPIContext *ctx = avctx->priv;
+
     if (ctx->va_context != VA_INVALID_ID) {
         vaDestroyContext(ctx->hwctx->display, ctx->va_context);
         ctx->va_context = VA_INVALID_ID;
@@ -102,7 +104,7 @@ static int scale_vaapi_config_input(AVFilterLink *inlink)
     AVFilterContext *avctx = inlink->dst;
     ScaleVAAPIContext *ctx = avctx->priv;
 
-    scale_vaapi_pipeline_uninit(ctx);
+    scale_vaapi_pipeline_uninit(avctx);
 
     if (!inlink->hw_frames_ctx) {
         av_log(avctx, AV_LOG_ERROR, "A hardware frames reference is "
@@ -127,7 +129,7 @@ static int scale_vaapi_config_output(AVFilterLink *outlink)
     VAStatus vas;
     int err, i;
 
-    scale_vaapi_pipeline_uninit(ctx);
+    scale_vaapi_pipeline_uninit(avctx);
 
     ctx->device_ref = av_buffer_ref(ctx->input_frames->device_ref);
     ctx->hwctx = ((AVHWDeviceContext*)ctx->device_ref->data)->hwctx;
@@ -421,7 +423,7 @@ static av_cold void scale_vaapi_uninit(AVFilterContext *avctx)
     ScaleVAAPIContext *ctx = avctx->priv;
 
     if (ctx->valid_ids)
-        scale_vaapi_pipeline_uninit(ctx);
+        scale_vaapi_pipeline_uninit(avctx);
 
     av_buffer_unref(&ctx->input_frames_ref);
     av_buffer_unref(&ctx->output_frames_ref);
