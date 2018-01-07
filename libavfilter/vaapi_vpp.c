@@ -293,6 +293,7 @@ int vaapi_vpp_render_picture(VAAPIVPPContext *ctx,
         }
     }
 
+    return 0;
     // We want to make sure that if vaBeginPicture has been called, we also
     // call vaRenderPicture and vaEndPicture.  These calls may well fail or
     // do something else nasty, but once we're in this failure case there
