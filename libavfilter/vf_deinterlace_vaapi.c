@@ -127,8 +127,8 @@ static int deint_vaapi_build_filter_params(AVFilterContext *avctx)
     params.flags     = 0;
 
     err = ff_vaapi_vpp_make_param_buffer(ctx->vpp_ctx,
-                                VAProcFilterParameterBufferType,
-                                &params, sizeof(params));
+                                         VAProcFilterParameterBufferType,
+                                         &params, sizeof(params));
     if(err != 0)
         return AVERROR(EIO);
     vas = vaQueryVideoProcPipelineCaps(ctx->vpp_ctx->hwctx->display,
@@ -291,8 +291,8 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
                 filter_params.flags |= field ? 0 : VA_DEINTERLACING_BOTTOM_FIELD;
             }
             err = ff_vaapi_vpp_make_param_buffer(ctx->vpp_ctx,
-                                        VAProcFilterParameterBufferType,
-                                        &filter_params, sizeof(filter_params));
+                                                 VAProcFilterParameterBufferType,
+                                                 &filter_params, sizeof(filter_params));
             if(err != 0)
                 goto fail;
 
