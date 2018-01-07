@@ -33,30 +33,18 @@
 #include "formats.h"
 #include "internal.h"
 #include "video.h"
+#include "vaapi_vpp.h"
 
 #define MAX_REFERENCES 8
 
 typedef struct DeintVAAPIContext {
     const AVClass     *class;
 
-    AVVAAPIDeviceContext *hwctx;
-    AVBufferRef       *device_ref;
+    VAAPIVPPContext   *vpp_ctx;
 
     int                mode;
     int                field_rate;
     int                auto_enable;
-
-    int                valid_ids;
-    VAConfigID         va_config;
-    VAContextID        va_context;
-
-    AVBufferRef       *input_frames_ref;
-    AVHWFramesContext *input_frames;
-
-    AVBufferRef       *output_frames_ref;
-    AVHWFramesContext *output_frames;
-    int                output_height;
-    int                output_width;
 
     VAProcFilterCapDeinterlacing
                        deint_caps[VAProcDeinterlacingCount];
@@ -67,8 +55,6 @@ typedef struct DeintVAAPIContext {
     int                queue_count;
     AVFrame           *frame_queue[MAX_REFERENCES];
     int                extra_delay_for_timestamps;
-
-    VABufferID         filter_buffer;
 } DeintVAAPIContext;
 
 static const char *deint_vaapi_mode_name(int mode)
@@ -87,49 +73,20 @@ static const char *deint_vaapi_mode_name(int mode)
 
 static int deint_vaapi_query_formats(AVFilterContext *avctx)
 {
-    enum AVPixelFormat pix_fmts[] = {
-        AV_PIX_FMT_VAAPI, AV_PIX_FMT_NONE,
-    };
-    int err;
-
-    if ((err = ff_formats_ref(ff_make_format_list(pix_fmts),
-                              &avctx->inputs[0]->out_formats)) < 0)
-        return err;
-    if ((err = ff_formats_ref(ff_make_format_list(pix_fmts),
-                              &avctx->outputs[0]->in_formats)) < 0)
-        return err;
-
-    return 0;
+    return vaapi_vpp_query_formats(avctx);
 }
 
 static int deint_vaapi_pipeline_uninit(AVFilterContext *avctx)
 {
     DeintVAAPIContext *ctx = avctx->priv;
+    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
     int i;
 
     for (i = 0; i < ctx->queue_count; i++)
         av_frame_free(&ctx->frame_queue[i]);
     ctx->queue_count = 0;
 
-    if (ctx->filter_buffer != VA_INVALID_ID) {
-        vaDestroyBuffer(ctx->hwctx->display, ctx->filter_buffer);
-        ctx->filter_buffer = VA_INVALID_ID;
-    }
-
-    if (ctx->va_context != VA_INVALID_ID) {
-        vaDestroyContext(ctx->hwctx->display, ctx->va_context);
-        ctx->va_context = VA_INVALID_ID;
-    }
-
-    if (ctx->va_config != VA_INVALID_ID) {
-        vaDestroyConfig(ctx->hwctx->display, ctx->va_config);
-        ctx->va_config = VA_INVALID_ID;
-    }
-
-    av_buffer_unref(&ctx->device_ref);
-    ctx->hwctx = NULL;
-
-    return 0;
+    return vaapi_vpp_pipeline_uninit(vpp_ctx);
 }
 
 static int deint_vaapi_config_input(AVFilterLink *inlink)
@@ -137,30 +94,22 @@ static int deint_vaapi_config_input(AVFilterLink *inlink)
     AVFilterContext   *avctx = inlink->dst;
     DeintVAAPIContext *ctx = avctx->priv;
 
-    deint_vaapi_pipeline_uninit(avctx);
+    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
 
-    if (!inlink->hw_frames_ctx) {
-        av_log(avctx, AV_LOG_ERROR, "A hardware frames reference is "
-               "required to associate the processing device.\n");
-        return AVERROR(EINVAL);
-    }
-
-    ctx->input_frames_ref = av_buffer_ref(inlink->hw_frames_ctx);
-    ctx->input_frames = (AVHWFramesContext*)ctx->input_frames_ref->data;
-
-    return 0;
+    return vaapi_vpp_config_input(inlink, vpp_ctx);
 }
 
 static int deint_vaapi_build_filter_params(AVFilterContext *avctx)
 {
     DeintVAAPIContext *ctx = avctx->priv;
+    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
     VAStatus vas;
     VAProcFilterParameterBufferDeinterlacing params;
     int i;
 
     ctx->nb_deint_caps = VAProcDeinterlacingCount;
-    vas = vaQueryVideoProcFilterCaps(ctx->hwctx->display,
-                                     ctx->va_context,
+    vas = vaQueryVideoProcFilterCaps(vpp_ctx->hwctx->display,
+                                     vpp_ctx->va_context,
                                      VAProcFilterDeinterlacing,
                                      &ctx->deint_caps,
                                      &ctx->nb_deint_caps);
@@ -194,20 +143,20 @@ static int deint_vaapi_build_filter_params(AVFilterContext *avctx)
     params.algorithm = ctx->mode;
     params.flags     = 0;
 
-    av_assert0(ctx->filter_buffer == VA_INVALID_ID);
-    vas = vaCreateBuffer(ctx->hwctx->display, ctx->va_context,
+    av_assert0(vpp_ctx->filter_buffer == VA_INVALID_ID);
+    vas = vaCreateBuffer(vpp_ctx->hwctx->display, vpp_ctx->va_context,
                          VAProcFilterParameterBufferType,
                          sizeof(params), 1, &params,
-                         &ctx->filter_buffer);
+                         &vpp_ctx->filter_buffer);
     if (vas != VA_STATUS_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Failed to create deinterlace "
                "parameter buffer: %d (%s).\n", vas, vaErrorStr(vas));
         return AVERROR(EIO);
     }
 
-    vas = vaQueryVideoProcPipelineCaps(ctx->hwctx->display,
-                                       ctx->va_context,
-                                       &ctx->filter_buffer, 1,
+    vas = vaQueryVideoProcPipelineCaps(vpp_ctx->hwctx->display,
+                                       vpp_ctx->va_context,
+                                       &vpp_ctx->filter_buffer, 1,
                                        &ctx->pipeline_caps);
     if (vas != VA_STATUS_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Failed to query pipeline "
@@ -234,6 +183,7 @@ static int deint_vaapi_build_filter_params(AVFilterContext *avctx)
 
 static int deint_vaapi_config_output(AVFilterLink *outlink)
 {
+    /*
     AVFilterContext    *avctx = outlink->src;
     AVFilterLink      *inlink = avctx->inputs[0];
     DeintVAAPIContext    *ctx = avctx->priv;
@@ -358,6 +308,26 @@ fail:
     av_freep(&hwconfig);
     av_hwframe_constraints_free(&constraints);
     return err;
+    */
+    AVFilterLink *inlink = outlink->src->inputs[0];
+    AVFilterContext *avctx = outlink->src;
+    DeintVAAPIContext *ctx = avctx->priv;
+    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
+    int err;
+
+    ctx->vpp_ctx->output_width = avctx->inputs[0]->w;
+    ctx->vpp_ctx->output_height = avctx->inputs[0]->h;
+
+    err = vaapi_vpp_config_output(outlink, vpp_ctx);
+    if (err < 0)
+        goto fail;
+    outlink->time_base  = av_mul_q(inlink->time_base,
+                                   (AVRational) { 1, ctx->field_rate });
+    outlink->frame_rate = av_mul_q(inlink->frame_rate,
+                                   (AVRational) { ctx->field_rate, 1 });
+
+fail:
+    return err;
 }
 
 static int vaapi_proc_colour_standard(enum AVColorSpace av_cs)
@@ -379,6 +349,7 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     AVFilterContext   *avctx = inlink->dst;
     AVFilterLink    *outlink = avctx->outputs[0];
     DeintVAAPIContext *ctx = avctx->priv;
+    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
     AVFrame *output_frame = NULL;
     VASurfaceID input_surface, output_surface;
     VASurfaceID backward_references[MAX_REFERENCES];
@@ -386,7 +357,6 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     VAProcPipelineParameterBuffer params;
     VAProcFilterParameterBufferDeinterlacing *filter_params;
     VARectangle input_region;
-    VABufferID params_id;
     VAStatus vas;
     void *filter_params_addr = NULL;
     int err, i, field, current_frame_index;
@@ -431,8 +401,8 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     av_log(avctx, AV_LOG_DEBUG, "\n");
 
     for (field = 0; field < ctx->field_rate; field++) {
-        output_frame = ff_get_video_buffer(outlink, ctx->output_width,
-                                           ctx->output_height);
+        output_frame = ff_get_video_buffer(outlink, vpp_ctx->output_width,
+                                           vpp_ctx->output_height);
         if (!output_frame) {
             err = AVERROR(ENOMEM);
             goto fail;
@@ -464,7 +434,7 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
         params.filter_flags   = VA_FRAME_PICTURE;
 
         if (!ctx->auto_enable || input_frame->interlaced_frame) {
-            vas = vaMapBuffer(ctx->hwctx->display, ctx->filter_buffer,
+            vas = vaMapBuffer(vpp_ctx->hwctx->display, vpp_ctx->filter_buffer,
                               &filter_params_addr);
             if (vas != VA_STATUS_SUCCESS) {
                 av_log(avctx, AV_LOG_ERROR, "Failed to map filter parameter "
@@ -481,12 +451,12 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
                 filter_params->flags |= field ? 0 : VA_DEINTERLACING_BOTTOM_FIELD;
             }
             filter_params_addr = NULL;
-            vas = vaUnmapBuffer(ctx->hwctx->display, ctx->filter_buffer);
+            vas = vaUnmapBuffer(vpp_ctx->hwctx->display, vpp_ctx->filter_buffer);
             if (vas != VA_STATUS_SUCCESS)
                 av_log(avctx, AV_LOG_ERROR, "Failed to unmap filter parameter "
                        "buffer: %d (%s).\n", vas, vaErrorStr(vas));
 
-            params.filters     = &ctx->filter_buffer;
+            params.filters     = &vpp_ctx->filter_buffer;
             params.num_filters = 1;
 
             params.forward_references = forward_references;
@@ -501,53 +471,9 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
             params.num_filters = 0;
         }
 
-        vas = vaBeginPicture(ctx->hwctx->display,
-                             ctx->va_context, output_surface);
-        if (vas != VA_STATUS_SUCCESS) {
-            av_log(avctx, AV_LOG_ERROR, "Failed to attach new picture: "
-                   "%d (%s).\n", vas, vaErrorStr(vas));
-            err = AVERROR(EIO);
+        err = vaapi_vpp_render_picture(vpp_ctx, &params, output_surface);
+        if (err < 0)
             goto fail;
-        }
-
-        vas = vaCreateBuffer(ctx->hwctx->display, ctx->va_context,
-                             VAProcPipelineParameterBufferType,
-                             sizeof(params), 1, &params, &params_id);
-        if (vas != VA_STATUS_SUCCESS) {
-            av_log(avctx, AV_LOG_ERROR, "Failed to create parameter buffer: "
-                   "%d (%s).\n", vas, vaErrorStr(vas));
-            err = AVERROR(EIO);
-            goto fail_after_begin;
-        }
-        av_log(avctx, AV_LOG_DEBUG, "Pipeline parameter buffer is %#x.\n",
-               params_id);
-
-        vas = vaRenderPicture(ctx->hwctx->display, ctx->va_context,
-                              &params_id, 1);
-        if (vas != VA_STATUS_SUCCESS) {
-            av_log(avctx, AV_LOG_ERROR, "Failed to render parameter buffer: "
-                   "%d (%s).\n", vas, vaErrorStr(vas));
-            err = AVERROR(EIO);
-            goto fail_after_begin;
-        }
-
-        vas = vaEndPicture(ctx->hwctx->display, ctx->va_context);
-        if (vas != VA_STATUS_SUCCESS) {
-            av_log(avctx, AV_LOG_ERROR, "Failed to start picture processing: "
-                   "%d (%s).\n", vas, vaErrorStr(vas));
-            err = AVERROR(EIO);
-            goto fail_after_render;
-        }
-
-        if (CONFIG_VAAPI_1 || ctx->hwctx->driver_quirks &
-            AV_VAAPI_DRIVER_QUIRK_RENDER_PARAM_BUFFERS) {
-            vas = vaDestroyBuffer(ctx->hwctx->display, params_id);
-            if (vas != VA_STATUS_SUCCESS) {
-                av_log(avctx, AV_LOG_ERROR, "Failed to free parameter buffer: "
-                       "%d (%s).\n", vas, vaErrorStr(vas));
-                // And ignore.
-            }
-        }
 
         err = av_frame_copy_props(output_frame, input_frame);
         if (err < 0)
@@ -573,13 +499,9 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 
     return err;
 
-fail_after_begin:
-    vaRenderPicture(ctx->hwctx->display, ctx->va_context, &params_id, 1);
-fail_after_render:
-    vaEndPicture(ctx->hwctx->display, ctx->va_context);
 fail:
     if (filter_params_addr)
-        vaUnmapBuffer(ctx->hwctx->display, ctx->filter_buffer);
+        vaUnmapBuffer(vpp_ctx->hwctx->display, vpp_ctx->filter_buffer);
     av_frame_free(&output_frame);
     return err;
 }
@@ -587,11 +509,18 @@ fail:
 static av_cold int deint_vaapi_init(AVFilterContext *avctx)
 {
     DeintVAAPIContext *ctx = avctx->priv;
+    VAAPIVPPContext *vpp_ctx;
 
-    ctx->va_config     = VA_INVALID_ID;
-    ctx->va_context    = VA_INVALID_ID;
-    ctx->filter_buffer = VA_INVALID_ID;
-    ctx->valid_ids = 1;
+    ctx->vpp_ctx = av_mallocz(sizeof(VAAPIVPPContext));
+    if (!ctx->vpp_ctx)
+        return AVERROR(ENOMEM);
+
+    vpp_ctx = ctx->vpp_ctx;
+
+    vaapi_vpp_ctx_init(vpp_ctx);
+    vpp_ctx->pipeline_uninit     = deint_vaapi_pipeline_uninit;
+    vpp_ctx->build_filter_params = deint_vaapi_build_filter_params;
+    vpp_ctx->output_format = AV_PIX_FMT_NONE;
 
     return 0;
 }
@@ -599,13 +528,9 @@ static av_cold int deint_vaapi_init(AVFilterContext *avctx)
 static av_cold void deint_vaapi_uninit(AVFilterContext *avctx)
 {
     DeintVAAPIContext *ctx = avctx->priv;
+    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
 
-    if (ctx->valid_ids)
-        deint_vaapi_pipeline_uninit(avctx);
-
-    av_buffer_unref(&ctx->input_frames_ref);
-    av_buffer_unref(&ctx->output_frames_ref);
-    av_buffer_unref(&ctx->device_ref);
+    vaapi_vpp_ctx_uninit(avctx, vpp_ctx);
 }
 
 #define OFFSET(x) offsetof(DeintVAAPIContext, x)
