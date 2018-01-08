@@ -40,7 +40,7 @@ typedef struct VAAPIVPPContext {
     int output_height;  // computed height
 
     VABufferID         filter_buffers[VAProcFilterCount];
-    int                num_filter_buffers;
+    int                nb_filter_buffers;
 
     int (*build_filter_params)(AVFilterContext *avctx);
 
@@ -62,6 +62,14 @@ int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx);
 
 int vaapi_vpp_colour_standard(enum AVColorSpace av_cs);
 
-int vaapi_vpp_render_picture(VAAPIVPPContext *ctx, VAProcPipelineParameterBuffer *params, VASurfaceID output_surface);
+int vaapi_vpp_make_param_buffers(VAAPIVPPContext *ctx,
+                                 int type,
+                                 const void *data,
+                                 size_t size,
+                                 int count);
+
+int vaapi_vpp_render_picture(VAAPIVPPContext *ctx,
+                             VAProcPipelineParameterBuffer *params,
+                             VASurfaceID output_surface);
 
 #endif /* AVFILTER_VAAPI_VPP_H */

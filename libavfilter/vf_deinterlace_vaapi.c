@@ -143,17 +143,11 @@ static int deint_vaapi_build_filter_params(AVFilterContext *avctx)
     params.algorithm = ctx->mode;
     params.flags     = 0;
 
-    av_assert0(vpp_ctx->filter_buffers[0] == VA_INVALID_ID);
-    vas = vaCreateBuffer(vpp_ctx->hwctx->display, vpp_ctx->va_context,
-                         VAProcFilterParameterBufferType,
-                         sizeof(params), 1, &params,
-                         &vpp_ctx->filter_buffers[0]);
-    if (vas != VA_STATUS_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "Failed to create deinterlace "
-               "parameter buffer: %d (%s).\n", vas, vaErrorStr(vas));
-        return AVERROR(EIO);
-    }
-    vpp_ctx->num_filter_buffers++;
+    vaapi_vpp_make_param_buffers(vpp_ctx,
+                                 VAProcFilterParameterBufferType,
+                                 &params,
+                                 sizeof(params),
+                                 1);
 
     vas = vaQueryVideoProcPipelineCaps(vpp_ctx->hwctx->display,
                                        vpp_ctx->va_context,

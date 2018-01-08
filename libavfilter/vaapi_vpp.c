@@ -48,13 +48,13 @@ int vaapi_vpp_query_formats(AVFilterContext *avctx)
 int vaapi_vpp_pipeline_uninit(VAAPIVPPContext *ctx)
 {
     int i;
-    for (i = 0; i < ctx->num_filter_buffers; i++) {
+    for (i = 0; i < ctx->nb_filter_buffers; i++) {
         if (ctx->filter_buffers[i] != VA_INVALID_ID) {
             vaDestroyBuffer(ctx->hwctx->display, ctx->filter_buffers[i]);
             ctx->filter_buffers[i] = VA_INVALID_ID;
         }
     }
-    ctx->num_filter_buffers = 0;
+    ctx->nb_filter_buffers = 0;
 
     if (ctx->va_context != VA_INVALID_ID) {
         vaDestroyContext(ctx->hwctx->display, ctx->va_context);
@@ -241,6 +241,34 @@ int vaapi_vpp_colour_standard(enum AVColorSpace av_cs)
     }
 }
 
+int vaapi_vpp_make_param_buffers(VAAPIVPPContext *ctx,
+                                int type,
+                                const void *data,
+                                size_t size,
+                                int count)
+{
+    VAStatus vas;
+    VABufferID buffer;
+
+    av_assert0(ctx->nb_filter_buffers + 1 <= VAProcFilterCount);
+
+    vas = vaCreateBuffer(ctx->hwctx->display, ctx->va_context,
+                         type, size, count, (void*)data, &buffer);
+    if (vas != VA_STATUS_SUCCESS) {
+        av_log(ctx, AV_LOG_ERROR, "Failed to create parameter "
+               "buffer (type %d): %d (%s).\n",
+               type, vas, vaErrorStr(vas));
+        return AVERROR(EIO);
+    }
+
+    ctx->filter_buffers[ctx->nb_filter_buffers++] = buffer;
+
+    av_log(ctx, AV_LOG_DEBUG, "Param buffer (type %d, %zu bytes, count %d) "
+           "is %#x.\n", type, size, count, buffer);
+    return 0;
+}
+
+
 int vaapi_vpp_render_picture(VAAPIVPPContext *ctx,
                              VAProcPipelineParameterBuffer *params,
                              VASurfaceID output_surface)
@@ -320,7 +348,7 @@ int vaapi_vpp_ctx_init(VAAPIVPPContext *ctx)
 
     for (i = 0; i < VAProcFilterCount; i++)
         ctx->filter_buffers[i] = VA_INVALID_ID;
-    ctx->num_filter_buffers = 0;
+    ctx->nb_filter_buffers = 0;
 
     return 0;
 }
