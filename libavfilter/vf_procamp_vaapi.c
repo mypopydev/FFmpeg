@@ -118,8 +118,8 @@ static int procamp_vaapi_build_filter_params(AVFilterContext *avctx)
     vaapi_vpp_make_param_buffers(vpp_ctx,
                                  VAProcFilterParameterBufferType,
                                  &procamp_params,
-                                 sizeof(procamp_params),
-                                 1);
+                                 sizeof(procamp_params[0]),
+                                 4);
 
     return 0;
 }
