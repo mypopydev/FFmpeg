@@ -200,22 +200,15 @@ static int deint_vaapi_config_output(AVFilterLink *outlink)
     outlink->frame_rate = av_mul_q(inlink->frame_rate,
                                    (AVRational) { ctx->field_rate, 1 });
 
+    return 0;
+
 fail:
     return err;
 }
 
 static int vaapi_proc_colour_standard(enum AVColorSpace av_cs)
 {
-    switch(av_cs) {
-#define CS(av, va) case AVCOL_SPC_ ## av: return VAProcColorStandard ## va;
-        CS(BT709,     BT709);
-        CS(BT470BG,   BT470BG);
-        CS(SMPTE170M, SMPTE170M);
-        CS(SMPTE240M, SMPTE240M);
-#undef CS
-    default:
-        return VAProcColorStandardNone;
-    }
+    return vaapi_vpp_colour_standard(av_cs);
 }
 
 static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
