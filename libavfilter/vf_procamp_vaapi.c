@@ -115,16 +115,17 @@ static int procamp_vaapi_build_filter_params(AVFilterContext *avctx)
                 procamp_caps[VAProcColorBalanceSaturation-1].range.min_value,
                 procamp_caps[VAProcColorBalanceSaturation-1].range.max_value);
 
-    av_assert0(vpp_ctx->filter_buffer == VA_INVALID_ID);
+    av_assert0(vpp_ctx->filter_buffers[0] == VA_INVALID_ID);
     vas = vaCreateBuffer(vpp_ctx->hwctx->display, vpp_ctx->va_context,
                          VAProcFilterParameterBufferType,
                          sizeof(procamp_params), 4, &procamp_params,
-                         &vpp_ctx->filter_buffer);
+                         &vpp_ctx->filter_buffers[vpp_ctx->num_filter_buffers]);
     if (vas != VA_STATUS_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Failed to create procamp "
                "parameter buffer: %d (%s).\n", vas, vaErrorStr(vas));
         return AVERROR(EIO);
     }
+    vpp_ctx->num_filter_buffers++;
 
     return 0;
 }
@@ -213,7 +214,7 @@ static int procamp_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame
     params.pipeline_flags = 0;
     params.filter_flags = VA_FRAME_PICTURE;
 
-    params.filters     = &vpp_ctx->filter_buffer;
+    params.filters     = &vpp_ctx->filter_buffers[0];
     params.num_filters = 1;
 
     err = vaapi_vpp_render_picture(vpp_ctx, &params, output_surface);

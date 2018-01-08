@@ -39,7 +39,8 @@ typedef struct VAAPIVPPContext {
     int output_width;   // computed width
     int output_height;  // computed height
 
-    VABufferID         filter_buffer;
+    VABufferID         filter_buffers[VAProcFilterCount];
+    int                num_filter_buffers;
 
     int (*build_filter_params)(AVFilterContext *avctx);
 

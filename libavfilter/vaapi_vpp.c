@@ -47,10 +47,14 @@ int vaapi_vpp_query_formats(AVFilterContext *avctx)
 
 int vaapi_vpp_pipeline_uninit(VAAPIVPPContext *ctx)
 {
-    if (ctx->filter_buffer != VA_INVALID_ID) {
-        vaDestroyBuffer(ctx->hwctx->display, ctx->filter_buffer);
-        ctx->filter_buffer = VA_INVALID_ID;
+    int i;
+    for (i = 0; i < ctx->num_filter_buffers; i++) {
+        if (ctx->filter_buffers[i] != VA_INVALID_ID) {
+            vaDestroyBuffer(ctx->hwctx->display, ctx->filter_buffers[i]);
+            ctx->filter_buffers[i] = VA_INVALID_ID;
+        }
     }
+    ctx->num_filter_buffers = 0;
 
     if (ctx->va_context != VA_INVALID_ID) {
         vaDestroyContext(ctx->hwctx->display, ctx->va_context);
@@ -294,6 +298,7 @@ int vaapi_vpp_render_picture(VAAPIVPPContext *ctx,
     }
 
     return 0;
+
     // We want to make sure that if vaBeginPicture has been called, we also
     // call vaRenderPicture and vaEndPicture.  These calls may well fail or
     // do something else nasty, but once we're in this failure case there
@@ -308,10 +313,14 @@ fail:
 
 int vaapi_vpp_ctx_init(VAAPIVPPContext *ctx)
 {
+    int i;
     ctx->va_config     = VA_INVALID_ID;
     ctx->va_context    = VA_INVALID_ID;
-    ctx->filter_buffer = VA_INVALID_ID;
     ctx->valid_ids  = 1;
+
+    for (i = 0; i < VAProcFilterCount; i++)
+        ctx->filter_buffers[i] = VA_INVALID_ID;
+    ctx->num_filter_buffers = 0;
 
     return 0;
 }

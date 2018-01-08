@@ -92,7 +92,7 @@ static int deint_vaapi_pipeline_uninit(AVFilterContext *avctx)
 static int deint_vaapi_config_input(AVFilterLink *inlink)
 {
     AVFilterContext   *avctx = inlink->dst;
-    DeintVAAPIContext *ctx = avctx->priv;
+    DeintVAAPIContext *ctx   = avctx->priv;
 
     VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
 
@@ -101,7 +101,7 @@ static int deint_vaapi_config_input(AVFilterLink *inlink)
 
 static int deint_vaapi_build_filter_params(AVFilterContext *avctx)
 {
-    DeintVAAPIContext *ctx = avctx->priv;
+    DeintVAAPIContext *ctx   = avctx->priv;
     VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
     VAStatus vas;
     VAProcFilterParameterBufferDeinterlacing params;
@@ -143,20 +143,21 @@ static int deint_vaapi_build_filter_params(AVFilterContext *avctx)
     params.algorithm = ctx->mode;
     params.flags     = 0;
 
-    av_assert0(vpp_ctx->filter_buffer == VA_INVALID_ID);
+    av_assert0(vpp_ctx->filter_buffers[0] == VA_INVALID_ID);
     vas = vaCreateBuffer(vpp_ctx->hwctx->display, vpp_ctx->va_context,
                          VAProcFilterParameterBufferType,
                          sizeof(params), 1, &params,
-                         &vpp_ctx->filter_buffer);
+                         &vpp_ctx->filter_buffers[0]);
     if (vas != VA_STATUS_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Failed to create deinterlace "
                "parameter buffer: %d (%s).\n", vas, vaErrorStr(vas));
         return AVERROR(EIO);
     }
+    vpp_ctx->num_filter_buffers++;
 
     vas = vaQueryVideoProcPipelineCaps(vpp_ctx->hwctx->display,
                                        vpp_ctx->va_context,
-                                       &vpp_ctx->filter_buffer, 1,
+                                       &vpp_ctx->filter_buffers[0], 1,
                                        &ctx->pipeline_caps);
     if (vas != VA_STATUS_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "Failed to query pipeline "
@@ -301,7 +302,7 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
         params.filter_flags   = VA_FRAME_PICTURE;
 
         if (!ctx->auto_enable || input_frame->interlaced_frame) {
-            vas = vaMapBuffer(vpp_ctx->hwctx->display, vpp_ctx->filter_buffer,
+            vas = vaMapBuffer(vpp_ctx->hwctx->display, vpp_ctx->filter_buffers[0],
                               &filter_params_addr);
             if (vas != VA_STATUS_SUCCESS) {
                 av_log(avctx, AV_LOG_ERROR, "Failed to map filter parameter "
@@ -318,12 +319,12 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
                 filter_params->flags |= field ? 0 : VA_DEINTERLACING_BOTTOM_FIELD;
             }
             filter_params_addr = NULL;
-            vas = vaUnmapBuffer(vpp_ctx->hwctx->display, vpp_ctx->filter_buffer);
+            vas = vaUnmapBuffer(vpp_ctx->hwctx->display, vpp_ctx->filter_buffers[0]);
             if (vas != VA_STATUS_SUCCESS)
                 av_log(avctx, AV_LOG_ERROR, "Failed to unmap filter parameter "
                        "buffer: %d (%s).\n", vas, vaErrorStr(vas));
 
-            params.filters     = &vpp_ctx->filter_buffer;
+            params.filters     = &vpp_ctx->filter_buffers[0];
             params.num_filters = 1;
 
             params.forward_references = forward_references;
@@ -368,7 +369,7 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 
 fail:
     if (filter_params_addr)
-        vaUnmapBuffer(vpp_ctx->hwctx->display, vpp_ctx->filter_buffer);
+        vaUnmapBuffer(vpp_ctx->hwctx->display, vpp_ctx->filter_buffers[0]);
     av_frame_free(&output_frame);
     return err;
 }
