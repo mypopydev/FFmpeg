@@ -191,7 +191,7 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
         return AVERROR(EINVAL);
 
     input_surface = (VASurfaceID)(uintptr_t)input_frame->data[3];
-    av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for procamp input.\n",
+    av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for misc vpp input.\n",
            input_surface);
 
     output_frame = av_frame_alloc();
@@ -208,7 +208,7 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     }
 
     output_surface = (VASurfaceID)(uintptr_t)output_frame->data[3];
-    av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for procamp output.\n",
+    av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for misc vpp output.\n",
            output_surface);
     memset(&params, 0, sizeof(params));
     input_region = (VARectangle) {
@@ -217,8 +217,6 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
         .width  = input_frame->width,
         .height = input_frame->height,
     };
-
-
 
     if (vpp_ctx->nb_filter_buffers) {
         params.filters     = &vpp_ctx->filter_buffers[0];
@@ -323,7 +321,7 @@ static const AVFilterPad misc_vaapi_outputs[] = {
 
 AVFilter ff_vf_misc_vaapi = {
     .name          = "misc_vaapi",
-    .description   = NULL_IF_CONFIG_SMALL("ProcAmp (color balance) adjustments for hue, saturation, brightness, contrast"),
+    .description   = NULL_IF_CONFIG_SMALL("Misc VAAPI VPP for de-noise, sharpness"),
     .priv_size     = sizeof(MiscVAAPIContext),
     .init          = &misc_vaapi_init,
     .uninit        = &misc_vaapi_uninit,
