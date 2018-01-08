@@ -77,7 +77,6 @@ static float map_to_range(
     return (input - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-
 static int misc_vaapi_build_filter_params(AVFilterContext *avctx)
 {
     MiscVAAPIContext *ctx = avctx->priv;
@@ -165,11 +164,6 @@ fail:
     return err;
 }
 
-static int vaapi_proc_colour_standard(enum AVColorSpace av_cs)
-{
-    return vaapi_vpp_colour_standard(av_cs);
-}
-
 static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 {
     AVFilterContext *avctx = inlink->dst;
@@ -225,7 +219,7 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     params.surface = input_surface;
     params.surface_region = &input_region;
     params.surface_color_standard =
-        vaapi_proc_colour_standard(input_frame->colorspace);
+        vaapi_vpp_colour_standard(input_frame->colorspace);
 
     params.output_region = NULL;
     params.output_background_color = 0xff000000;

@@ -201,11 +201,6 @@ fail:
     return err;
 }
 
-static int vaapi_proc_colour_standard(enum AVColorSpace av_cs)
-{
-    return vaapi_vpp_colour_standard(av_cs);
-}
-
 static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 {
     AVFilterContext   *avctx = inlink->dst;
@@ -286,7 +281,7 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
         params.surface = input_surface;
         params.surface_region = &input_region;
         params.surface_color_standard =
-            vaapi_proc_colour_standard(input_frame->colorspace);
+            vaapi_vpp_colour_standard(input_frame->colorspace);
 
         params.output_region = NULL;
         params.output_background_color = 0xff000000;
