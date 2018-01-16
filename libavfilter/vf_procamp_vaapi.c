@@ -31,37 +31,16 @@
 #include "vaapi_vpp.h"
 
 typedef struct ProcampVAAPIContext {
-    const AVClass *class;
-
-    VAAPIVPPContext   *vpp_ctx;
-
     float bright;
     float hue;
     float saturation;
     float contrast;
 } ProcampVAAPIContext;
 
-static void procamp_vaapi_pipeline_uninit(AVFilterContext *avctx)
-{
-    ProcampVAAPIContext *ctx =  avctx->priv;
-    VAAPIVPPContext *vpp_ctx =  ctx->vpp_ctx;
-
-    vaapi_vpp_pipeline_uninit(vpp_ctx);
-}
-
-static int procamp_vaapi_config_input(AVFilterLink *inlink)
-{
-    AVFilterContext *avctx   = inlink->dst;
-    ProcampVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
-
-    return vaapi_vpp_config_input(inlink, vpp_ctx);
-}
-
 static int procamp_vaapi_build_filter_params(AVFilterContext *avctx)
 {
-    ProcampVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
+    ProcampVAAPIContext *ctx = (ProcampVAAPIContext *)vpp_ctx->priv_data;
     VAStatus vas;
     VAProcFilterParameterBufferColorBalance procamp_params[4];
     VAProcFilterCapColorBalance procamp_caps[VAProcColorBalanceCount];
@@ -116,26 +95,12 @@ static int procamp_vaapi_build_filter_params(AVFilterContext *avctx)
 
 }
 
-static int procamp_vaapi_config_output(AVFilterLink *outlink)
-{
-    AVFilterContext *avctx   = outlink->src;
-    ProcampVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
-    int err;
-
-    err = vaapi_vpp_config_output(outlink, vpp_ctx);
-    if (err < 0)
-        return err;
-
-    return 0;
-}
-
 static int procamp_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 {
     AVFilterContext *avctx = inlink->dst;
     AVFilterLink *outlink = avctx->outputs[0];
-    ProcampVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
+    ProcampVAAPIContext *ctx = (ProcampVAAPIContext *)vpp_ctx->priv_data;
     AVFrame *output_frame = NULL;
     VASurfaceID input_surface, output_surface;
     VAProcPipelineParameterBuffer params;
@@ -209,32 +174,18 @@ fail:
 
 static av_cold int procamp_vaapi_init(AVFilterContext *avctx)
 {
-    ProcampVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx;
-
-    ctx->vpp_ctx = av_mallocz(sizeof(VAAPIVPPContext));
-    if (!ctx->vpp_ctx)
-        return AVERROR(ENOMEM);
-
-    vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
 
     vaapi_vpp_ctx_init(vpp_ctx);
-    vpp_ctx->pipeline_uninit     = procamp_vaapi_pipeline_uninit;
+    vpp_ctx->pipeline_uninit     = vaapi_vpp_pipeline_uninit;
     vpp_ctx->build_filter_params = procamp_vaapi_build_filter_params;
-    vpp_ctx->output_format = AV_PIX_FMT_NONE;
+    vpp_ctx->output_format       = AV_PIX_FMT_NONE;
 
     return 0;
 }
 
-static av_cold void procamp_vaapi_uninit(AVFilterContext *avctx)
-{
-    ProcampVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
-
-    vaapi_vpp_ctx_uninit(avctx, vpp_ctx);
-}
-
-#define OFFSET(x) offsetof(ProcampVAAPIContext, x)
+#define OFFSET(x) (offsetof(VAAPIVPPContext, priv_data) + \
+                    offsetof(ProcampVAAPIContext, x))
 #define FLAGS (AV_OPT_FLAG_VIDEO_PARAM)
 static const AVOption procamp_vaapi_options[] = {
     { "b", "Output video brightness",
@@ -264,7 +215,7 @@ static const AVFilterPad procamp_vaapi_inputs[] = {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
         .filter_frame = &procamp_vaapi_filter_frame,
-        .config_props = &procamp_vaapi_config_input,
+        .config_props = &vaapi_vpp_config_input,
     },
     { NULL }
 };
@@ -273,7 +224,7 @@ static const AVFilterPad procamp_vaapi_outputs[] = {
     {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
-        .config_props = &procamp_vaapi_config_output,
+        .config_props = &vaapi_vpp_config_output,
     },
     { NULL }
 };
@@ -281,9 +232,10 @@ static const AVFilterPad procamp_vaapi_outputs[] = {
 AVFilter ff_vf_procamp_vaapi = {
     .name          = "procamp_vaapi",
     .description   = NULL_IF_CONFIG_SMALL("ProcAmp (color balance) adjustments for hue, saturation, brightness, contrast"),
-    .priv_size     = sizeof(ProcampVAAPIContext),
+    .priv_size     = (sizeof(VAAPIVPPContext) +
+                      sizeof(ProcampVAAPIContext)),
     .init          = &procamp_vaapi_init,
-    .uninit        = &procamp_vaapi_uninit,
+    .uninit        = &vaapi_vpp_ctx_uninit,
     .query_formats = &vaapi_vpp_query_formats,
     .inputs        = procamp_vaapi_inputs,
     .outputs       = procamp_vaapi_outputs,
