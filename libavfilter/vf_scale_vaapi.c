@@ -46,18 +46,12 @@ typedef struct ScaleVAAPIContext {
     char *h_expr;      // height expression string
 } ScaleVAAPIContext;
 
-
-static int scale_vaapi_query_formats(AVFilterContext *avctx)
-{
-    return vaapi_vpp_query_formats(avctx);
-}
-
-static int scale_vaapi_pipeline_uninit(AVFilterContext *avctx)
+static void scale_vaapi_pipeline_uninit(AVFilterContext *avctx)
 {
     ScaleVAAPIContext *ctx = avctx->priv;
     VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
 
-    return vaapi_vpp_pipeline_uninit(vpp_ctx);
+    vaapi_vpp_pipeline_uninit(vpp_ctx);
 }
 
 static int scale_vaapi_config_input(AVFilterLink *inlink)
@@ -249,7 +243,7 @@ AVFilter ff_vf_scale_vaapi = {
     .priv_size     = sizeof(ScaleVAAPIContext),
     .init          = &scale_vaapi_init,
     .uninit        = &scale_vaapi_uninit,
-    .query_formats = &scale_vaapi_query_formats,
+    .query_formats = &vaapi_vpp_query_formats,
     .inputs        = scale_vaapi_inputs,
     .outputs       = scale_vaapi_outputs,
     .priv_class    = &scale_vaapi_class,
