@@ -52,7 +52,7 @@ static float map_to_range(
 static int misc_vaapi_build_filter_params(AVFilterContext *avctx)
 {
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    MiscVAAPIContext *ctx = (MiscVAAPIContext *)vpp_ctx->priv_data;
+    MiscVAAPIContext *ctx    = vpp_ctx->priv;
 
     VAStatus vas;
     VAProcFilterParameterBufferColorBalance misc_params[4];
@@ -111,7 +111,7 @@ static int misc_vaapi_config_output(AVFilterLink *outlink)
 {
     AVFilterContext *avctx   = outlink->src;
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    MiscVAAPIContext *ctx = (MiscVAAPIContext *)vpp_ctx->priv_data;
+    MiscVAAPIContext *ctx    = vpp_ctx->priv;
     int err;
 
     // multiple filters aren't supported in the driver:
@@ -132,11 +132,11 @@ static int misc_vaapi_config_output(AVFilterLink *outlink)
 
 static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 {
-    AVFilterContext *avctx = inlink->dst;
-    AVFilterLink *outlink = avctx->outputs[0];
+    AVFilterContext *avctx   = inlink->dst;
+    AVFilterLink *outlink    = avctx->outputs[0];
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    MiscVAAPIContext *ctx = (MiscVAAPIContext *)vpp_ctx->priv_data;
-    AVFrame *output_frame = NULL;
+    MiscVAAPIContext *ctx    = vpp_ctx->priv;
+    AVFrame *output_frame    = NULL;
     VASurfaceID input_surface, output_surface;
     VARectangle input_region;
 
@@ -224,7 +224,7 @@ static av_cold int misc_vaapi_init(AVFilterContext *avctx)
 static av_cold void misc_vaapi_uninit(AVFilterContext *avctx)
 {
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    MiscVAAPIContext *ctx = (MiscVAAPIContext *)vpp_ctx->priv_data;
+    MiscVAAPIContext *ctx    = vpp_ctx->priv;
     for (int i = 0; i < ctx->num_filter_bufs; i++)
         vaDestroyBuffer(vpp_ctx->hwctx->display, ctx->filter_bufs[i]);
 
