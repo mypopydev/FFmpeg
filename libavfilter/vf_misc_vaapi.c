@@ -134,9 +134,6 @@ static int misc_vaapi_config_output(AVFilterLink *outlink)
     VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
     int err;
 
-    ctx->vpp_ctx->output_width = avctx->inputs[0]->w;
-    ctx->vpp_ctx->output_height = avctx->inputs[0]->h;
-
     // multiple filters aren't supported in the driver:
     // sharpness can't work with noise reduction(de-noise), deinterlacing
     // color balance, skin tone enhancement...
