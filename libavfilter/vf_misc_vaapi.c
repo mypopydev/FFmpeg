@@ -31,10 +31,6 @@
 #include "vaapi_vpp.h"
 
 typedef struct MiscVAAPIContext {
-    const AVClass *class;
-
-    VAAPIVPPContext   *vpp_ctx;
-
     VAProcFilterCap denoise_caps;
     int denoise;         // enable denoise algo. level is the optional
                          // value from the interval [-1, 100], -1 means disabled
@@ -46,23 +42,6 @@ typedef struct MiscVAAPIContext {
     VABufferID filter_bufs[VAProcFilterCount];
 } MiscVAAPIContext;
 
-static void misc_vaapi_pipeline_uninit(AVFilterContext *avctx)
-{
-    MiscVAAPIContext *ctx =  avctx->priv;
-    VAAPIVPPContext *vpp_ctx =  ctx->vpp_ctx;
-
-    vaapi_vpp_pipeline_uninit(vpp_ctx);
-}
-
-static int misc_vaapi_config_input(AVFilterLink *inlink)
-{
-    AVFilterContext *avctx   = inlink->dst;
-    MiscVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
-
-    return vaapi_vpp_config_input(inlink, vpp_ctx);
-}
-
 static float map_to_range(
     int input, int in_min, int in_max,
     float out_min, float out_max)
@@ -72,8 +51,9 @@ static float map_to_range(
 
 static int misc_vaapi_build_filter_params(AVFilterContext *avctx)
 {
-    MiscVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
+    MiscVAAPIContext *ctx = (MiscVAAPIContext *)vpp_ctx->priv_data;
+
     VAStatus vas;
     VAProcFilterParameterBufferColorBalance misc_params[4];
     VAProcFilterCapColorBalance misc_caps[VAProcColorBalanceCount];
@@ -130,8 +110,8 @@ static int misc_vaapi_build_filter_params(AVFilterContext *avctx)
 static int misc_vaapi_config_output(AVFilterLink *outlink)
 {
     AVFilterContext *avctx   = outlink->src;
-    MiscVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
+    MiscVAAPIContext *ctx = (MiscVAAPIContext *)vpp_ctx->priv_data;
     int err;
 
     // multiple filters aren't supported in the driver:
@@ -143,7 +123,7 @@ static int misc_vaapi_config_output(AVFilterLink *outlink)
         return AVERROR(EINVAL);
     }
 
-    err = vaapi_vpp_config_output(outlink, vpp_ctx);
+    err = vaapi_vpp_config_output(outlink);
     if (err < 0)
         return err;
 
@@ -154,8 +134,8 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 {
     AVFilterContext *avctx = inlink->dst;
     AVFilterLink *outlink = avctx->outputs[0];
-    MiscVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
+    MiscVAAPIContext *ctx = (MiscVAAPIContext *)vpp_ctx->priv_data;
     AVFrame *output_frame = NULL;
     VASurfaceID input_surface, output_surface;
     VARectangle input_region;
@@ -231,17 +211,10 @@ fail:
 
 static av_cold int misc_vaapi_init(AVFilterContext *avctx)
 {
-    MiscVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx;
-
-    ctx->vpp_ctx = av_mallocz(sizeof(VAAPIVPPContext));
-    if (!ctx->vpp_ctx)
-        return AVERROR(ENOMEM);
-
-    vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
 
     vaapi_vpp_ctx_init(vpp_ctx);
-    vpp_ctx->pipeline_uninit     = misc_vaapi_pipeline_uninit;
+    vpp_ctx->pipeline_uninit     = vaapi_vpp_pipeline_uninit;
     vpp_ctx->build_filter_params = misc_vaapi_build_filter_params;
     vpp_ctx->output_format = AV_PIX_FMT_NONE;
 
@@ -250,15 +223,16 @@ static av_cold int misc_vaapi_init(AVFilterContext *avctx)
 
 static av_cold void misc_vaapi_uninit(AVFilterContext *avctx)
 {
-    MiscVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
+    MiscVAAPIContext *ctx = (MiscVAAPIContext *)vpp_ctx->priv_data;
     for (int i = 0; i < ctx->num_filter_bufs; i++)
         vaDestroyBuffer(vpp_ctx->hwctx->display, ctx->filter_bufs[i]);
 
-    vaapi_vpp_ctx_uninit(avctx, vpp_ctx);
+    vaapi_vpp_ctx_uninit(avctx);
 }
 
-#define OFFSET(x) offsetof(MiscVAAPIContext, x)
+#define OFFSET(x) (offsetof(VAAPIVPPContext, priv_data) + \
+                   offsetof(MiscVAAPIContext, x))
 #define FLAGS (AV_OPT_FLAG_VIDEO_PARAM)
 static const AVOption misc_vaapi_options[] = {
     { "denoise", "denoise level [-1, 100], -1 means disabled",
@@ -268,19 +242,14 @@ static const AVOption misc_vaapi_options[] = {
     { NULL },
 };
 
-static const AVClass misc_vaapi_class = {
-    .class_name = "misc_vaapi",
-    .item_name  = av_default_item_name,
-    .option     = misc_vaapi_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
+AVFILTER_DEFINE_CLASS(misc_vaapi);
 
 static const AVFilterPad misc_vaapi_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
         .filter_frame = &misc_vaapi_filter_frame,
-        .config_props = &misc_vaapi_config_input,
+        .config_props = &vaapi_vpp_config_input,
     },
     { NULL }
 };
@@ -297,7 +266,8 @@ static const AVFilterPad misc_vaapi_outputs[] = {
 AVFilter ff_vf_misc_vaapi = {
     .name          = "misc_vaapi",
     .description   = NULL_IF_CONFIG_SMALL("Misc VAAPI VPP for de-noise, sharpness"),
-    .priv_size     = sizeof(MiscVAAPIContext),
+    .priv_size     = (sizeof(VAAPIVPPContext) +
+                      sizeof(MiscVAAPIContext)),
     .init          = &misc_vaapi_init,
     .uninit        = &misc_vaapi_uninit,
     .query_formats = &vaapi_vpp_query_formats,
