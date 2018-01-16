@@ -34,39 +34,18 @@
 #include "vaapi_vpp.h"
 
 typedef struct ScaleVAAPIContext {
-    const AVClass *class;
-
-    VAAPIVPPContext *vpp_ctx;
-
     char *output_format_string;
 
     char *w_expr;      // width expression string
     char *h_expr;      // height expression string
 } ScaleVAAPIContext;
 
-static void scale_vaapi_pipeline_uninit(AVFilterContext *avctx)
-{
-    ScaleVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
-
-    vaapi_vpp_pipeline_uninit(vpp_ctx);
-}
-
-static int scale_vaapi_config_input(AVFilterLink *inlink)
-{
-    AVFilterContext *avctx = inlink->dst;
-    ScaleVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
-
-    return vaapi_vpp_config_input(inlink, vpp_ctx);
-}
-
 static int scale_vaapi_config_output(AVFilterLink *outlink)
 {
     AVFilterLink *inlink = outlink->src->inputs[0];
     AVFilterContext *avctx = outlink->src;
-    ScaleVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
+    ScaleVAAPIContext *ctx = (ScaleVAAPIContext *)vpp_ctx->priv_data;
     int err;
 
     if ((err = ff_scale_eval_dimensions(ctx,
@@ -75,7 +54,7 @@ static int scale_vaapi_config_output(AVFilterLink *outlink)
                                         &vpp_ctx->output_width, &vpp_ctx->output_height)) < 0)
         return err;
 
-    err = vaapi_vpp_config_output(outlink, vpp_ctx);
+    err = vaapi_vpp_config_output(outlink);
     if (err < 0)
         return err;
 
@@ -86,8 +65,8 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 {
     AVFilterContext *avctx = inlink->dst;
     AVFilterLink *outlink = avctx->outputs[0];
-    ScaleVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
+    ScaleVAAPIContext *ctx = (ScaleVAAPIContext *)vpp_ctx->priv_data;
     AVFrame *output_frame = NULL;
     VASurfaceID input_surface, output_surface;
     VAProcPipelineParameterBuffer params;
@@ -163,17 +142,11 @@ fail:
 
 static av_cold int scale_vaapi_init(AVFilterContext *avctx)
 {
-    ScaleVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx;
-
-    ctx->vpp_ctx = av_mallocz(sizeof(VAAPIVPPContext));
-    if (!ctx->vpp_ctx)
-        return AVERROR(ENOMEM);
-
-    vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
+    ScaleVAAPIContext *ctx = (ScaleVAAPIContext *)vpp_ctx->priv_data;
 
     vaapi_vpp_ctx_init(vpp_ctx);
-    vpp_ctx->pipeline_uninit = scale_vaapi_pipeline_uninit;
+    vpp_ctx->pipeline_uninit = vaapi_vpp_pipeline_uninit;
 
     if (ctx->output_format_string) {
         vpp_ctx->output_format = av_get_pix_fmt(ctx->output_format_string);
@@ -189,16 +162,8 @@ static av_cold int scale_vaapi_init(AVFilterContext *avctx)
     return 0;
 }
 
-static av_cold void scale_vaapi_uninit(AVFilterContext *avctx)
-{
-    ScaleVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
-
-    vaapi_vpp_ctx_uninit(avctx, vpp_ctx);
-}
-
-
-#define OFFSET(x) offsetof(ScaleVAAPIContext, x)
+#define OFFSET(x) (offsetof(VAAPIVPPContext, priv_data) + \
+                   offsetof(ScaleVAAPIContext, x))
 #define FLAGS (AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM)
 static const AVOption scale_vaapi_options[] = {
     { "w", "Output video width",
@@ -217,7 +182,7 @@ static const AVFilterPad scale_vaapi_inputs[] = {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
         .filter_frame = &scale_vaapi_filter_frame,
-        .config_props = &scale_vaapi_config_input,
+        .config_props = &vaapi_vpp_config_input,
     },
     { NULL }
 };
@@ -234,9 +199,10 @@ static const AVFilterPad scale_vaapi_outputs[] = {
 AVFilter ff_vf_scale_vaapi = {
     .name          = "scale_vaapi",
     .description   = NULL_IF_CONFIG_SMALL("Scale to/from VAAPI surfaces."),
-    .priv_size     = sizeof(ScaleVAAPIContext),
+    .priv_size     = (sizeof(VAAPIVPPContext) +
+                      sizeof(ScaleVAAPIContext)),
     .init          = &scale_vaapi_init,
-    .uninit        = &scale_vaapi_uninit,
+    .uninit        = &vaapi_vpp_ctx_uninit,
     .query_formats = &vaapi_vpp_query_formats,
     .inputs        = scale_vaapi_inputs,
     .outputs       = scale_vaapi_outputs,
