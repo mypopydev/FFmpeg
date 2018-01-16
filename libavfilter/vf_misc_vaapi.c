@@ -48,17 +48,12 @@ typedef struct MiscVAAPIContext {
     VABufferID filter_bufs[VAProcFilterCount];
 } MiscVAAPIContext;
 
-static int misc_vaapi_query_formats(AVFilterContext *avctx)
-{
-    return vaapi_vpp_query_formats(avctx);
-}
-
-static int misc_vaapi_pipeline_uninit(AVFilterContext *avctx)
+static void misc_vaapi_pipeline_uninit(AVFilterContext *avctx)
 {
     MiscVAAPIContext *ctx =  avctx->priv;
     VAAPIVPPContext *vpp_ctx =  ctx->vpp_ctx;
 
-    return vaapi_vpp_pipeline_uninit(vpp_ctx);
+    vaapi_vpp_pipeline_uninit(vpp_ctx);
 }
 
 static int misc_vaapi_config_input(AVFilterLink *inlink)
@@ -319,10 +314,9 @@ AVFilter ff_vf_misc_vaapi = {
     .priv_size     = sizeof(MiscVAAPIContext),
     .init          = &misc_vaapi_init,
     .uninit        = &misc_vaapi_uninit,
-    .query_formats = &misc_vaapi_query_formats,
+    .query_formats = &vaapi_vpp_query_formats,
     .inputs        = misc_vaapi_inputs,
     .outputs       = misc_vaapi_outputs,
     .priv_class    = &misc_vaapi_class,
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
 };
-
