@@ -174,17 +174,11 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for misc vpp input.\n",
            input_surface);
 
-    output_frame = av_frame_alloc();
+    output_frame = ff_get_video_buffer(outlink, vpp_ctx->output_width,
+                                       vpp_ctx->output_height);
     if (!output_frame) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to allocate output frame.");
         err = AVERROR(ENOMEM);
         goto fail;
-    }
-
-    err = av_hwframe_get_buffer(vpp_ctx->output_frames_ref, output_frame, 0);
-    if (err < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to get surface for "
-               "output: %d\n.", err);
     }
 
     output_surface = (VASurfaceID)(uintptr_t)output_frame->data[3];
@@ -230,6 +224,7 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     return ff_filter_frame(outlink, output_frame);
 
 fail:
+    av_frame_free(&input_frame);
     av_frame_free(&output_frame);
     return err;
 }
