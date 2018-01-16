@@ -43,17 +43,12 @@ typedef struct ProcampVAAPIContext {
     float contrast;
 } ProcampVAAPIContext;
 
-static int procamp_vaapi_query_formats(AVFilterContext *avctx)
-{
-    return vaapi_vpp_query_formats(avctx);
-}
-
-static int procamp_vaapi_pipeline_uninit(AVFilterContext *avctx)
+static void procamp_vaapi_pipeline_uninit(AVFilterContext *avctx)
 {
     ProcampVAAPIContext *ctx =  avctx->priv;
     VAAPIVPPContext *vpp_ctx =  ctx->vpp_ctx;
 
-    return vaapi_vpp_pipeline_uninit(vpp_ctx);
+    vaapi_vpp_pipeline_uninit(vpp_ctx);
 }
 
 static int procamp_vaapi_config_input(AVFilterLink *inlink)
@@ -299,10 +294,9 @@ AVFilter ff_vf_procamp_vaapi = {
     .priv_size     = sizeof(ProcampVAAPIContext),
     .init          = &procamp_vaapi_init,
     .uninit        = &procamp_vaapi_uninit,
-    .query_formats = &procamp_vaapi_query_formats,
+    .query_formats = &vaapi_vpp_query_formats,
     .inputs        = procamp_vaapi_inputs,
     .outputs       = procamp_vaapi_outputs,
     .priv_class    = &procamp_vaapi_class,
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
 };
-
