@@ -151,6 +151,9 @@ int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
         }
     }
 
+    ctx->output_width  = avctx->inputs[0]->w;
+    ctx->output_height = avctx->inputs[0]->h;
+
     if (ctx->output_width  < constraints->min_width  ||
         ctx->output_height < constraints->min_height ||
         ctx->output_width  > constraints->max_width  ||
