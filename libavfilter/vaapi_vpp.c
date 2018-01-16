@@ -19,14 +19,10 @@
 #include <string.h>
 
 #include "libavutil/avassert.h"
-#include "libavutil/hwcontext.h"
-#include "libavutil/hwcontext_vaapi.h"
-
-#include "avfilter.h"
-#include "formats.h"
-#include "vaapi_vpp.h"
-
 #include "libavutil/pixdesc.h"
+#include "formats.h"
+
+#include "vaapi_vpp.h"
 
 int vaapi_vpp_query_formats(AVFilterContext *avctx)
 {
@@ -45,7 +41,7 @@ int vaapi_vpp_query_formats(AVFilterContext *avctx)
     return 0;
 }
 
-int vaapi_vpp_pipeline_uninit(VAAPIVPPContext *ctx)
+void vaapi_vpp_pipeline_uninit(VAAPIVPPContext *ctx)
 {
     int i;
     for (i = 0; i < ctx->nb_filter_buffers; i++) {
@@ -69,8 +65,6 @@ int vaapi_vpp_pipeline_uninit(VAAPIVPPContext *ctx)
     av_buffer_unref(&ctx->output_frames_ref);
     av_buffer_unref(&ctx->device_ref);
     ctx->hwctx = 0;
-
-    return 0;
 }
 
 int vaapi_vpp_config_input(AVFilterLink *inlink, VAAPIVPPContext *ctx)
@@ -242,10 +236,10 @@ int vaapi_vpp_colour_standard(enum AVColorSpace av_cs)
 }
 
 int vaapi_vpp_make_param_buffers(VAAPIVPPContext *ctx,
-                                int type,
-                                const void *data,
-                                size_t size,
-                                int count)
+                                 int type,
+                                 const void *data,
+                                 size_t size,
+                                 int count)
 {
     VAStatus vas;
     VABufferID buffer;

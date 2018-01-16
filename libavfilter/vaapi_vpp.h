@@ -19,6 +19,11 @@
 #ifndef AVFILTER_VAAPI_VPP_H
 #define AVFILTER_VAAPI_VPP_H
 
+#include "libavutil/hwcontext.h"
+#include "libavutil/hwcontext_vaapi.h"
+
+#include "avfilter.h"
+
 typedef struct VAAPIVPPContext {
     const AVClass *class;
 
@@ -44,7 +49,7 @@ typedef struct VAAPIVPPContext {
 
     int (*build_filter_params)(AVFilterContext *avctx);
 
-    int (*pipeline_uninit)(AVFilterContext *avctx);
+    void (*pipeline_uninit)(AVFilterContext *avctx);
 
 } VAAPIVPPContext;
 
@@ -54,7 +59,7 @@ void vaapi_vpp_ctx_uninit(AVFilterContext *avctx, VAAPIVPPContext *ctx);
 
 int vaapi_vpp_query_formats(AVFilterContext *avctx);
 
-int vaapi_vpp_pipeline_uninit(VAAPIVPPContext *ctx);
+void vaapi_vpp_pipeline_uninit(VAAPIVPPContext *ctx);
 
 int vaapi_vpp_config_input(AVFilterLink *inlink, VAAPIVPPContext *ctx);
 
