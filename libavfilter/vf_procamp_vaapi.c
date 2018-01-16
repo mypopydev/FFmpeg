@@ -126,12 +126,9 @@ static int procamp_vaapi_config_output(AVFilterLink *outlink)
 
     err = vaapi_vpp_config_output(outlink, vpp_ctx);
     if (err < 0)
-        goto fail;
+        return err;
 
     return 0;
-
-fail:
-    return err;
 }
 
 static int procamp_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
