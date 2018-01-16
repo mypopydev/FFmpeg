@@ -140,18 +140,14 @@ static int misc_vaapi_config_output(AVFilterLink *outlink)
     if (ctx->denoise != -1 && ctx->sharpness != -1) {
         av_log(ctx, AV_LOG_ERROR, "Do not support multiply filters (sharpness "
                "can't work with the other filters).\n");
-        err = AVERROR(EINVAL);
-        goto fail;
+        return AVERROR(EINVAL);
     }
 
     err = vaapi_vpp_config_output(outlink, vpp_ctx);
     if (err < 0)
-        goto fail;
+        return err;
 
     return 0;
-
-fail:
-    return err;
 }
 
 static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
