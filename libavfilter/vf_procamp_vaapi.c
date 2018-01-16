@@ -40,7 +40,7 @@ typedef struct ProcampVAAPIContext {
 static int procamp_vaapi_build_filter_params(AVFilterContext *avctx)
 {
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    ProcampVAAPIContext *ctx = (ProcampVAAPIContext *)vpp_ctx->priv_data;
+    ProcampVAAPIContext *ctx = vpp_ctx->priv;
     VAStatus vas;
     VAProcFilterParameterBufferColorBalance procamp_params[4];
     VAProcFilterCapColorBalance procamp_caps[VAProcColorBalanceCount];
@@ -97,10 +97,10 @@ static int procamp_vaapi_build_filter_params(AVFilterContext *avctx)
 
 static int procamp_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 {
-    AVFilterContext *avctx = inlink->dst;
-    AVFilterLink *outlink = avctx->outputs[0];
+    AVFilterContext *avctx   = inlink->dst;
+    AVFilterLink *outlink    = avctx->outputs[0];
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    ProcampVAAPIContext *ctx = (ProcampVAAPIContext *)vpp_ctx->priv_data;
+    ProcampVAAPIContext *ctx = vpp_ctx->priv;
     AVFrame *output_frame = NULL;
     VASurfaceID input_surface, output_surface;
     VAProcPipelineParameterBuffer params;
