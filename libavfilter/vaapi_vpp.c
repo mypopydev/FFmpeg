@@ -343,7 +343,7 @@ fail:
     return err;
 }
 
-int vaapi_vpp_ctx_init(VAAPIVPPContext *ctx)
+void vaapi_vpp_ctx_init(VAAPIVPPContext *ctx)
 {
     int i;
     ctx->va_config  = VA_INVALID_ID;
@@ -353,8 +353,6 @@ int vaapi_vpp_ctx_init(VAAPIVPPContext *ctx)
     for (i = 0; i < VAProcFilterCount; i++)
         ctx->filter_buffers[i] = VA_INVALID_ID;
     ctx->nb_filter_buffers = 0;
-
-    return 0;
 }
 
 void vaapi_vpp_ctx_uninit(AVFilterContext *avctx, VAAPIVPPContext *ctx)

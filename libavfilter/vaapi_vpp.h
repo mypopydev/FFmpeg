@@ -53,7 +53,7 @@ typedef struct VAAPIVPPContext {
 
 } VAAPIVPPContext;
 
-int vaapi_vpp_ctx_init(VAAPIVPPContext *ctx);
+void vaapi_vpp_ctx_init(VAAPIVPPContext *ctx);
 
 void vaapi_vpp_ctx_uninit(AVFilterContext *avctx, VAAPIVPPContext *ctx);
 
