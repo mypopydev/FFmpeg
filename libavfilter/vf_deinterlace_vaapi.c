@@ -36,10 +36,6 @@
 #define MAX_REFERENCES 8
 
 typedef struct DeintVAAPIContext {
-    const AVClass     *class;
-
-    VAAPIVPPContext   *vpp_ctx;
-
     int                mode;
     int                field_rate;
     int                auto_enable;
@@ -71,31 +67,21 @@ static const char *deint_vaapi_mode_name(int mode)
 
 static void deint_vaapi_pipeline_uninit(AVFilterContext *avctx)
 {
-    DeintVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
+    DeintVAAPIContext *ctx = (DeintVAAPIContext *)vpp_ctx->priv_data;
     int i;
 
     for (i = 0; i < ctx->queue_count; i++)
         av_frame_free(&ctx->frame_queue[i]);
     ctx->queue_count = 0;
 
-    vaapi_vpp_pipeline_uninit(vpp_ctx);
-}
-
-static int deint_vaapi_config_input(AVFilterLink *inlink)
-{
-    AVFilterContext   *avctx = inlink->dst;
-    DeintVAAPIContext *ctx   = avctx->priv;
-
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
-
-    return vaapi_vpp_config_input(inlink, vpp_ctx);
+    vaapi_vpp_pipeline_uninit(avctx);
 }
 
 static int deint_vaapi_build_filter_params(AVFilterContext *avctx)
 {
-    DeintVAAPIContext *ctx   = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
+    DeintVAAPIContext *ctx = (DeintVAAPIContext *)vpp_ctx->priv_data;
     VAStatus vas;
     VAProcFilterParameterBufferDeinterlacing params;
     int i;
@@ -173,11 +159,11 @@ static int deint_vaapi_config_output(AVFilterLink *outlink)
 {
     AVFilterLink *inlink = outlink->src->inputs[0];
     AVFilterContext *avctx = outlink->src;
-    DeintVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
+    DeintVAAPIContext *ctx = (DeintVAAPIContext *)vpp_ctx->priv_data;
     int err;
 
-    err = vaapi_vpp_config_output(outlink, vpp_ctx);
+    err = vaapi_vpp_config_output(outlink);
     if (err < 0)
         return err;
     outlink->time_base  = av_mul_q(inlink->time_base,
@@ -192,8 +178,8 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 {
     AVFilterContext   *avctx = inlink->dst;
     AVFilterLink    *outlink = avctx->outputs[0];
-    DeintVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
+    DeintVAAPIContext *ctx = (DeintVAAPIContext *)vpp_ctx->priv_data;
     AVFrame *output_frame = NULL;
     VASurfaceID input_surface, output_surface;
     VASurfaceID backward_references[MAX_REFERENCES];
@@ -352,32 +338,18 @@ fail:
 
 static av_cold int deint_vaapi_init(AVFilterContext *avctx)
 {
-    DeintVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx;
-
-    ctx->vpp_ctx = av_mallocz(sizeof(VAAPIVPPContext));
-    if (!ctx->vpp_ctx)
-        return AVERROR(ENOMEM);
-
-    vpp_ctx = ctx->vpp_ctx;
+    VAAPIVPPContext *vpp_ctx = avctx->priv;
 
     vaapi_vpp_ctx_init(vpp_ctx);
     vpp_ctx->pipeline_uninit     = deint_vaapi_pipeline_uninit;
     vpp_ctx->build_filter_params = deint_vaapi_build_filter_params;
-    vpp_ctx->output_format = AV_PIX_FMT_NONE;
+    vpp_ctx->output_format       = AV_PIX_FMT_NONE;
 
     return 0;
 }
 
-static av_cold void deint_vaapi_uninit(AVFilterContext *avctx)
-{
-    DeintVAAPIContext *ctx = avctx->priv;
-    VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
-
-    vaapi_vpp_ctx_uninit(avctx, vpp_ctx);
-}
-
-#define OFFSET(x) offsetof(DeintVAAPIContext, x)
+#define OFFSET(x) (offsetof(VAAPIVPPContext, priv_data) + \
+                   offsetof(DeintVAAPIContext, x))
 #define FLAGS (AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM)
 static const AVOption deint_vaapi_options[] = {
     { "mode", "Deinterlacing mode",
@@ -419,7 +391,7 @@ static const AVFilterPad deint_vaapi_inputs[] = {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
         .filter_frame = &deint_vaapi_filter_frame,
-        .config_props = &deint_vaapi_config_input,
+        .config_props = &vaapi_vpp_config_input,
     },
     { NULL }
 };
@@ -436,9 +408,10 @@ static const AVFilterPad deint_vaapi_outputs[] = {
 AVFilter ff_vf_deinterlace_vaapi = {
     .name           = "deinterlace_vaapi",
     .description    = NULL_IF_CONFIG_SMALL("Deinterlacing of VAAPI surfaces"),
-    .priv_size      = sizeof(DeintVAAPIContext),
+    .priv_size      = (sizeof(VAAPIVPPContext) +
+                       sizeof(DeintVAAPIContext)),
     .init           = &deint_vaapi_init,
-    .uninit         = &deint_vaapi_uninit,
+    .uninit         = &vaapi_vpp_ctx_uninit,
     .query_formats  = &vaapi_vpp_query_formats,
     .inputs         = deint_vaapi_inputs,
     .outputs        = deint_vaapi_outputs,
