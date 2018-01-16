@@ -69,14 +69,14 @@ static int scale_vaapi_config_output(AVFilterLink *outlink)
     VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
     int err;
 
-    err = vaapi_vpp_config_output(outlink, vpp_ctx);
-    if (err < 0)
-        return err;
-
     if ((err = ff_scale_eval_dimensions(ctx,
                                         ctx->w_expr, ctx->h_expr,
                                         inlink, outlink,
                                         &vpp_ctx->output_width, &vpp_ctx->output_height)) < 0)
+        return err;
+
+    err = vaapi_vpp_config_output(outlink, vpp_ctx);
+    if (err < 0)
         return err;
 
     return 0;
@@ -210,12 +210,7 @@ static const AVOption scale_vaapi_options[] = {
     { NULL },
 };
 
-static const AVClass scale_vaapi_class = {
-    .class_name = "scale_vaapi",
-    .item_name  = av_default_item_name,
-    .option     = scale_vaapi_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
+AVFILTER_DEFINE_CLASS(scale_vaapi);
 
 static const AVFilterPad scale_vaapi_inputs[] = {
     {
