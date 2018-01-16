@@ -42,10 +42,10 @@ typedef struct ScaleVAAPIContext {
 
 static int scale_vaapi_config_output(AVFilterLink *outlink)
 {
-    AVFilterLink *inlink = outlink->src->inputs[0];
-    AVFilterContext *avctx = outlink->src;
+    AVFilterLink *inlink     = outlink->src->inputs[0];
+    AVFilterContext *avctx   = outlink->src;
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    ScaleVAAPIContext *ctx = (ScaleVAAPIContext *)vpp_ctx->priv_data;
+    ScaleVAAPIContext *ctx   = vpp_ctx->priv;
     int err;
 
     if ((err = ff_scale_eval_dimensions(ctx,
@@ -63,11 +63,11 @@ static int scale_vaapi_config_output(AVFilterLink *outlink)
 
 static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 {
-    AVFilterContext *avctx = inlink->dst;
-    AVFilterLink *outlink = avctx->outputs[0];
+    AVFilterContext *avctx   = inlink->dst;
+    AVFilterLink *outlink    = avctx->outputs[0];
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    ScaleVAAPIContext *ctx = (ScaleVAAPIContext *)vpp_ctx->priv_data;
-    AVFrame *output_frame = NULL;
+    ScaleVAAPIContext *ctx   = vpp_ctx->priv;
+    AVFrame *output_frame    = NULL;
     VASurfaceID input_surface, output_surface;
     VAProcPipelineParameterBuffer params;
     VARectangle input_region;
@@ -143,7 +143,7 @@ fail:
 static av_cold int scale_vaapi_init(AVFilterContext *avctx)
 {
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    ScaleVAAPIContext *ctx = (ScaleVAAPIContext *)vpp_ctx->priv_data;
+    ScaleVAAPIContext *ctx   = (ScaleVAAPIContext *)vpp_ctx->priv_data;
 
     vaapi_vpp_ctx_init(vpp_ctx);
     vpp_ctx->pipeline_uninit = vaapi_vpp_pipeline_uninit;
