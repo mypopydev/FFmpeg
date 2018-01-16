@@ -179,16 +179,13 @@ static int deint_vaapi_config_output(AVFilterLink *outlink)
 
     err = vaapi_vpp_config_output(outlink, vpp_ctx);
     if (err < 0)
-        goto fail;
+        return err;
     outlink->time_base  = av_mul_q(inlink->time_base,
                                    (AVRational) { 1, ctx->field_rate });
     outlink->frame_rate = av_mul_q(inlink->frame_rate,
                                    (AVRational) { ctx->field_rate, 1 });
 
     return 0;
-
-fail:
-    return err;
 }
 
 static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
