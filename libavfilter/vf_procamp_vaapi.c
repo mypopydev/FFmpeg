@@ -108,13 +108,12 @@ static int procamp_vaapi_build_filter_params(AVFilterContext *avctx)
                 procamp_caps[VAProcColorBalanceSaturation-1].range.min_value,
                 procamp_caps[VAProcColorBalanceSaturation-1].range.max_value);
 
-    vaapi_vpp_make_param_buffers(vpp_ctx,
+    return vaapi_vpp_make_param_buffers(vpp_ctx,
                                  VAProcFilterParameterBufferType,
                                  &procamp_params,
                                  sizeof(procamp_params[0]),
                                  4);
 
-    return 0;
 }
 
 static int procamp_vaapi_config_output(AVFilterLink *outlink)
@@ -154,17 +153,11 @@ static int procamp_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame
     av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for procamp input.\n",
            input_surface);
 
-    output_frame = av_frame_alloc();
+    output_frame = ff_get_video_buffer(outlink, vpp_ctx->output_width,
+                                       vpp_ctx->output_height);
     if (!output_frame) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to allocate output frame.");
         err = AVERROR(ENOMEM);
         goto fail;
-    }
-
-    err = av_hwframe_get_buffer(vpp_ctx->output_frames_ref, output_frame, 0);
-    if (err < 0) {
-        av_log(ctx, AV_LOG_ERROR, "Failed to get surface for "
-               "output: %d\n.", err);
     }
 
     output_surface = (VASurfaceID)(uintptr_t)output_frame->data[3];
@@ -209,6 +202,7 @@ static int procamp_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame
     return ff_filter_frame(outlink, output_frame);
 
 fail:
+    av_frame_free(&input_frame);
     av_frame_free(&output_frame);
     return err;
 }
@@ -251,15 +245,19 @@ static const AVOption procamp_vaapi_options[] = {
       OFFSET(contrast),  AV_OPT_TYPE_FLOAT, { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS },
     { "h", "Output video hue",
       OFFSET(hue), AV_OPT_TYPE_FLOAT, { .dbl = 0.0 }, -180.0, 180.0, .flags = FLAGS },
+
+    { "brightness", "Output video brightness",
+      OFFSET(bright),  AV_OPT_TYPE_FLOAT, { .dbl = 0.0 }, -100.0, 100.0, .flags = FLAGS },
+    { "saturatio", "Output video saturation",
+      OFFSET(saturation), AV_OPT_TYPE_FLOAT, { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS },
+    { "contrast", "Output video contrast",
+      OFFSET(contrast),  AV_OPT_TYPE_FLOAT, { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS },
+    { "hue", "Output video hue",
+      OFFSET(hue), AV_OPT_TYPE_FLOAT, { .dbl = 0.0 }, -180.0, 180.0, .flags = FLAGS },
     { NULL },
 };
 
-static const AVClass procamp_vaapi_class = {
-    .class_name = "procamp_vaapi",
-    .item_name  = av_default_item_name,
-    .option     = procamp_vaapi_options,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
+AVFILTER_DEFINE_CLASS(procamp_vaapi);
 
 static const AVFilterPad procamp_vaapi_inputs[] = {
     {
