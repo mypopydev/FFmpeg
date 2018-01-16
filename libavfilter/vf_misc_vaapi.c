@@ -21,8 +21,6 @@
 #include <va/va_vpp.h>
 
 #include "libavutil/avassert.h"
-#include "libavutil/hwcontext.h"
-#include "libavutil/hwcontext_vaapi.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
