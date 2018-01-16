@@ -68,7 +68,7 @@ static const char *deint_vaapi_mode_name(int mode)
 static void deint_vaapi_pipeline_uninit(AVFilterContext *avctx)
 {
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    DeintVAAPIContext *ctx = (DeintVAAPIContext *)vpp_ctx->priv_data;
+    DeintVAAPIContext *ctx   = vpp_ctx->priv;
     int i;
 
     for (i = 0; i < ctx->queue_count; i++)
@@ -81,7 +81,7 @@ static void deint_vaapi_pipeline_uninit(AVFilterContext *avctx)
 static int deint_vaapi_build_filter_params(AVFilterContext *avctx)
 {
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    DeintVAAPIContext *ctx = (DeintVAAPIContext *)vpp_ctx->priv_data;
+    DeintVAAPIContext *ctx   = vpp_ctx->priv;
     VAStatus vas;
     VAProcFilterParameterBufferDeinterlacing params;
     int i;
@@ -179,8 +179,8 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     AVFilterContext   *avctx = inlink->dst;
     AVFilterLink    *outlink = avctx->outputs[0];
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    DeintVAAPIContext *ctx = (DeintVAAPIContext *)vpp_ctx->priv_data;
-    AVFrame *output_frame = NULL;
+    DeintVAAPIContext *ctx   = vpp_ctx->priv;
+    AVFrame *output_frame    = NULL;
     VASurfaceID input_surface, output_surface;
     VASurfaceID backward_references[MAX_REFERENCES];
     VASurfaceID forward_references[MAX_REFERENCES];
