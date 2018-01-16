@@ -69,13 +69,17 @@ static int scale_vaapi_config_output(AVFilterLink *outlink)
     VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
     int err;
 
+    err = vaapi_vpp_config_output(outlink, vpp_ctx);
+    if (err < 0)
+        goto fail;
+
     if ((err = ff_scale_eval_dimensions(ctx,
                                         ctx->w_expr, ctx->h_expr,
                                         inlink, outlink,
                                         &vpp_ctx->output_width, &vpp_ctx->output_height)) < 0)
         goto fail;
 
-    err = vaapi_vpp_config_output(outlink, vpp_ctx);
+    return 0;
 
 fail:
     return err;
