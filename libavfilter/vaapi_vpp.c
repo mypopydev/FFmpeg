@@ -103,6 +103,11 @@ int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
     if (ctx->pipeline_uninit)
         ctx->pipeline_uninit(avctx);
 
+    if (!ctx->output_width)
+        ctx->output_width  = avctx->inputs[0]->w;
+    if (!ctx->output_height)
+        ctx->output_height = avctx->inputs[0]->h;
+
     av_assert0(ctx->input_frames);
     ctx->device_ref = av_buffer_ref(ctx->input_frames->device_ref);
     if (!ctx->input_frames_ref) {
@@ -150,9 +155,6 @@ int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
             goto fail;
         }
     }
-
-    ctx->output_width  = avctx->inputs[0]->w;
-    ctx->output_height = avctx->inputs[0]->h;
 
     if (ctx->output_width  < constraints->min_width  ||
         ctx->output_height < constraints->min_height ||
