@@ -71,12 +71,7 @@ static const char *deint_vaapi_mode_name(int mode)
     }
 }
 
-static int deint_vaapi_query_formats(AVFilterContext *avctx)
-{
-    return vaapi_vpp_query_formats(avctx);
-}
-
-static int deint_vaapi_pipeline_uninit(AVFilterContext *avctx)
+static void deint_vaapi_pipeline_uninit(AVFilterContext *avctx)
 {
     DeintVAAPIContext *ctx = avctx->priv;
     VAAPIVPPContext *vpp_ctx = ctx->vpp_ctx;
@@ -86,7 +81,7 @@ static int deint_vaapi_pipeline_uninit(AVFilterContext *avctx)
         av_frame_free(&ctx->frame_queue[i]);
     ctx->queue_count = 0;
 
-    return vaapi_vpp_pipeline_uninit(vpp_ctx);
+    vaapi_vpp_pipeline_uninit(vpp_ctx);
 }
 
 static int deint_vaapi_config_input(AVFilterLink *inlink)
@@ -452,7 +447,7 @@ AVFilter ff_vf_deinterlace_vaapi = {
     .priv_size      = sizeof(DeintVAAPIContext),
     .init           = &deint_vaapi_init,
     .uninit         = &deint_vaapi_uninit,
-    .query_formats  = &deint_vaapi_query_formats,
+    .query_formats  = &vaapi_vpp_query_formats,
     .inputs         = deint_vaapi_inputs,
     .outputs        = deint_vaapi_outputs,
     .priv_class     = &deint_vaapi_class,
