@@ -358,6 +358,8 @@ void vaapi_vpp_ctx_init(VAAPIVPPContext *ctx)
     ctx->va_context = VA_INVALID_ID;
     ctx->valid_ids  = 1;
 
+    ctx->priv = ctx->priv_data;
+
     for (i = 0; i < VAProcFilterCount; i++)
         ctx->filter_buffers[i] = VA_INVALID_ID;
     ctx->nb_filter_buffers = 0;
