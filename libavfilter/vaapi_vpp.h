@@ -51,19 +51,24 @@ typedef struct VAAPIVPPContext {
 
     void (*pipeline_uninit)(AVFilterContext *avctx);
 
+    // VPP-local context are allocated to follow this structure in
+    // memory (in the AVFilter definition, set priv_size to
+    // sizeof(VAAPIVPPContext) + sizeof(FooVAAPIOptions)).
+    void *priv;
+    char priv_data[0];
 } VAAPIVPPContext;
 
 void vaapi_vpp_ctx_init(VAAPIVPPContext *ctx);
 
-void vaapi_vpp_ctx_uninit(AVFilterContext *avctx, VAAPIVPPContext *ctx);
+void vaapi_vpp_ctx_uninit(AVFilterContext *avctx);
 
 int vaapi_vpp_query_formats(AVFilterContext *avctx);
 
-void vaapi_vpp_pipeline_uninit(VAAPIVPPContext *ctx);
+void vaapi_vpp_pipeline_uninit(AVFilterContext *avctx);
 
-int vaapi_vpp_config_input(AVFilterLink *inlink, VAAPIVPPContext *ctx);
+int vaapi_vpp_config_input(AVFilterLink *inlink);
 
-int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx);
+int vaapi_vpp_config_output(AVFilterLink *outlink);
 
 int vaapi_vpp_colour_standard(enum AVColorSpace av_cs);
 

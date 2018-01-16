@@ -41,8 +41,9 @@ int vaapi_vpp_query_formats(AVFilterContext *avctx)
     return 0;
 }
 
-void vaapi_vpp_pipeline_uninit(VAAPIVPPContext *ctx)
+void vaapi_vpp_pipeline_uninit(AVFilterContext *avctx)
 {
+    VAAPIVPPContext *ctx   = avctx->priv;
     int i;
     for (i = 0; i < ctx->nb_filter_buffers; i++) {
         if (ctx->filter_buffers[i] != VA_INVALID_ID) {
@@ -67,9 +68,10 @@ void vaapi_vpp_pipeline_uninit(VAAPIVPPContext *ctx)
     ctx->hwctx = NULL;
 }
 
-int vaapi_vpp_config_input(AVFilterLink *inlink, VAAPIVPPContext *ctx)
+int vaapi_vpp_config_input(AVFilterLink *inlink)
 {
     AVFilterContext *avctx = inlink->dst;
+    VAAPIVPPContext *ctx   = avctx->priv;
 
     if (ctx->pipeline_uninit)
         ctx->pipeline_uninit(avctx);
@@ -91,9 +93,10 @@ int vaapi_vpp_config_input(AVFilterLink *inlink, VAAPIVPPContext *ctx)
     return 0;
 }
 
-int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
+int vaapi_vpp_config_output(AVFilterLink *outlink)
 {
     AVFilterContext *avctx = outlink->src;
+    VAAPIVPPContext *ctx   = avctx->priv;
     AVVAAPIHWConfig *hwconfig = NULL;
     AVHWFramesConstraints *constraints = NULL;
     AVVAAPIFramesContext *va_frames;
@@ -360,14 +363,13 @@ void vaapi_vpp_ctx_init(VAAPIVPPContext *ctx)
     ctx->nb_filter_buffers = 0;
 }
 
-void vaapi_vpp_ctx_uninit(AVFilterContext *avctx, VAAPIVPPContext *ctx)
+void vaapi_vpp_ctx_uninit(AVFilterContext *avctx)
 {
+    VAAPIVPPContext *ctx   = avctx->priv;
     if (ctx->valid_ids && ctx->pipeline_uninit)
         ctx->pipeline_uninit(avctx);
 
     av_buffer_unref(&ctx->input_frames_ref);
     av_buffer_unref(&ctx->output_frames_ref);
     av_buffer_unref(&ctx->device_ref);
-
-    av_free(ctx);
 }
