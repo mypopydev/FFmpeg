@@ -81,6 +81,11 @@ int vaapi_vpp_config_input(AVFilterLink *inlink, VAAPIVPPContext *ctx)
     }
 
     ctx->input_frames_ref = av_buffer_ref(inlink->hw_frames_ctx);
+    if (!ctx->input_frames_ref) {
+        av_log(avctx, AV_LOG_ERROR, "A input frames reference create "
+               "failed.\n");
+        return AVERROR(ENOMEM);
+    }
     ctx->input_frames = (AVHWFramesContext*)ctx->input_frames_ref->data;
 
     return 0;
@@ -100,6 +105,11 @@ int vaapi_vpp_config_output(AVFilterLink *outlink, VAAPIVPPContext *ctx)
 
     av_assert0(ctx->input_frames);
     ctx->device_ref = av_buffer_ref(ctx->input_frames->device_ref);
+    if (!ctx->input_frames_ref) {
+        av_log(avctx, AV_LOG_ERROR, "A input frames reference create "
+               "failed.\n");
+        return AVERROR(ENOMEM);
+    }
     ctx->hwctx = ((AVHWDeviceContext*)ctx->device_ref->data)->hwctx;
 
     av_assert0(ctx->va_config == VA_INVALID_ID);
