@@ -54,45 +54,32 @@ static int procamp_vaapi_build_filter_params(AVFilterContext *avctx)
                                      VAProcFilterColorBalance, &procamp_caps, &num_caps);
 
     if (vas != VA_STATUS_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "Failed to Query procamp "
-               "query caps: %d (%s).\n", vas, vaErrorStr(vas));
+        av_log(avctx, AV_LOG_ERROR, "Failed to query procamp "
+               "filter caps: %d (%s).\n", vas, vaErrorStr(vas));
         return AVERROR(EIO);
     }
 
     procamp_params[0].type   = VAProcFilterColorBalance;
     procamp_params[0].attrib = VAProcColorBalanceBrightness;
-    procamp_params[0].value =
-        av_clip(ctx->bright,
-                procamp_caps[VAProcColorBalanceBrightness-1].range.min_value,
-                procamp_caps[VAProcColorBalanceBrightness-1].range.max_value);
+    procamp_params[0].value  = ctx->bright;
 
     procamp_params[1].type   = VAProcFilterColorBalance;
     procamp_params[1].attrib = VAProcColorBalanceContrast;
-    procamp_params[1].value =
-        av_clip(ctx->contrast,
-                procamp_caps[VAProcColorBalanceContrast-1].range.min_value,
-                procamp_caps[VAProcColorBalanceContrast-1].range.max_value);
+    procamp_params[1].value  = ctx->contrast;
 
     procamp_params[2].type   = VAProcFilterColorBalance;
     procamp_params[2].attrib = VAProcColorBalanceHue;
-    procamp_params[2].value =
-        av_clip(ctx->hue,
-                procamp_caps[VAProcColorBalanceHue-1].range.min_value,
-                procamp_caps[VAProcColorBalanceHue-1].range.max_value);
+    procamp_params[2].value  = ctx->hue;
 
     procamp_params[3].type   = VAProcFilterColorBalance;
     procamp_params[3].attrib = VAProcColorBalanceSaturation;
-    procamp_params[3].value =
-        av_clip(ctx->saturation,
-                procamp_caps[VAProcColorBalanceSaturation-1].range.min_value,
-                procamp_caps[VAProcColorBalanceSaturation-1].range.max_value);
+    procamp_params[3].value  = ctx->saturation;
 
     return vaapi_vpp_make_param_buffers(vpp_ctx,
-                                 VAProcFilterParameterBufferType,
-                                 &procamp_params,
-                                 sizeof(procamp_params[0]),
-                                 4);
-
+                                        VAProcFilterParameterBufferType,
+                                        &procamp_params,
+                                        sizeof(procamp_params[0]),
+                                        4);
 }
 
 static int procamp_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
@@ -190,19 +177,18 @@ static av_cold int procamp_vaapi_init(AVFilterContext *avctx)
 static const AVOption procamp_vaapi_options[] = {
     { "b", "Output video brightness",
       OFFSET(bright),  AV_OPT_TYPE_FLOAT, { .dbl = 0.0 }, -100.0, 100.0, .flags = FLAGS },
+    { "brightness", "Output video brightness",
+      OFFSET(bright),  AV_OPT_TYPE_FLOAT, { .dbl = 0.0 }, -100.0, 100.0, .flags = FLAGS },
     { "s", "Output video saturation",
+      OFFSET(saturation), AV_OPT_TYPE_FLOAT, { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS },
+    { "saturatio", "Output video saturation",
       OFFSET(saturation), AV_OPT_TYPE_FLOAT, { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS },
     { "c", "Output video contrast",
       OFFSET(contrast),  AV_OPT_TYPE_FLOAT, { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS },
-    { "h", "Output video hue",
-      OFFSET(hue), AV_OPT_TYPE_FLOAT, { .dbl = 0.0 }, -180.0, 180.0, .flags = FLAGS },
-
-    { "brightness", "Output video brightness",
-      OFFSET(bright),  AV_OPT_TYPE_FLOAT, { .dbl = 0.0 }, -100.0, 100.0, .flags = FLAGS },
-    { "saturatio", "Output video saturation",
-      OFFSET(saturation), AV_OPT_TYPE_FLOAT, { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS },
     { "contrast", "Output video contrast",
       OFFSET(contrast),  AV_OPT_TYPE_FLOAT, { .dbl = 1.0 }, 0.0, 10.0, .flags = FLAGS },
+    { "h", "Output video hue",
+      OFFSET(hue), AV_OPT_TYPE_FLOAT, { .dbl = 0.0 }, -180.0, 180.0, .flags = FLAGS },
     { "hue", "Output video hue",
       OFFSET(hue), AV_OPT_TYPE_FLOAT, { .dbl = 0.0 }, -180.0, 180.0, .flags = FLAGS },
     { NULL },
