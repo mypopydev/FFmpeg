@@ -68,7 +68,7 @@ static int misc_vaapi_build_filter_params(AVFilterContext *avctx)
                                          VAProcFilterNoiseReduction,
                                          &ctx->denoise_caps, &num_denoise_caps);
         if (vas != VA_STATUS_SUCCESS) {
-            av_log(ctx, AV_LOG_ERROR, "Failed to query denoise caps "
+            av_log(avctx, AV_LOG_ERROR, "Failed to query denoise caps "
                    "context: %d (%s).\n", vas, vaErrorStr(vas));
             return AVERROR(EIO);
         }
@@ -86,7 +86,7 @@ static int misc_vaapi_build_filter_params(AVFilterContext *avctx)
                                          VAProcFilterSharpening,
                                          &ctx->sharpness_caps, &num_sharpness_caps);
         if (vas != VA_STATUS_SUCCESS) {
-            av_log(ctx, AV_LOG_ERROR, "Failed to query sharpness caps "
+            av_log(avctx, AV_LOG_ERROR, "Failed to query sharpness caps "
                    "context: %d (%s).\n", vas, vaErrorStr(vas));
             return AVERROR(EIO);
         }
@@ -115,7 +115,7 @@ static int misc_vaapi_config_output(AVFilterLink *outlink)
     // sharpness can't work with noise reduction(de-noise), deinterlacing
     // color balance, skin tone enhancement...
     if (ctx->denoise != -1 && ctx->sharpness != -1) {
-        av_log(ctx, AV_LOG_ERROR, "Do not support multiply filters (sharpness "
+        av_log(avctx, AV_LOG_ERROR, "Do not support multiply filters (sharpness "
                "can't work with the other filters).\n");
         return AVERROR(EINVAL);
     }
@@ -132,7 +132,6 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     AVFilterContext *avctx   = inlink->dst;
     AVFilterLink *outlink    = avctx->outputs[0];
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    MiscVAAPIContext *ctx    = vpp_ctx->priv;
     AVFrame *output_frame    = NULL;
     VASurfaceID input_surface, output_surface;
     VARectangle input_region;
@@ -140,7 +139,7 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     VAProcPipelineParameterBuffer params;
     int err;
 
-    av_log(ctx, AV_LOG_DEBUG, "Filter input: %s, %ux%u (%"PRId64").\n",
+    av_log(avctx, AV_LOG_DEBUG, "Filter input: %s, %ux%u (%"PRId64").\n",
            av_get_pix_fmt_name(input_frame->format),
            input_frame->width, input_frame->height, input_frame->pts);
 
@@ -148,7 +147,7 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
         return AVERROR(EINVAL);
 
     input_surface = (VASurfaceID)(uintptr_t)input_frame->data[3];
-    av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for misc vpp input.\n",
+    av_log(avctx, AV_LOG_DEBUG, "Using surface %#x for misc vpp input.\n",
            input_surface);
 
     output_frame = ff_get_video_buffer(outlink, vpp_ctx->output_width,
@@ -159,7 +158,7 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     }
 
     output_surface = (VASurfaceID)(uintptr_t)output_frame->data[3];
-    av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for misc vpp output.\n",
+    av_log(avctx, AV_LOG_DEBUG, "Using surface %#x for misc vpp output.\n",
            output_surface);
     memset(&params, 0, sizeof(params));
     input_region = (VARectangle) {
@@ -194,7 +193,7 @@ static int misc_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
         goto fail;
     av_frame_free(&input_frame);
 
-    av_log(ctx, AV_LOG_DEBUG, "Filter output: %s, %ux%u (%"PRId64").\n",
+    av_log(avctx, AV_LOG_DEBUG, "Filter output: %s, %ux%u (%"PRId64").\n",
            av_get_pix_fmt_name(output_frame->format),
            output_frame->width, output_frame->height, output_frame->pts);
 
@@ -213,7 +212,7 @@ static av_cold int misc_vaapi_init(AVFilterContext *avctx)
     vaapi_vpp_ctx_init(vpp_ctx);
     vpp_ctx->pipeline_uninit     = vaapi_vpp_pipeline_uninit;
     vpp_ctx->build_filter_params = misc_vaapi_build_filter_params;
-    vpp_ctx->output_format = AV_PIX_FMT_NONE;
+    vpp_ctx->output_format       = AV_PIX_FMT_NONE;
 
     return 0;
 }
