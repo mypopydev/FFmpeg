@@ -84,14 +84,13 @@ static int procamp_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame
     AVFilterContext *avctx   = inlink->dst;
     AVFilterLink *outlink    = avctx->outputs[0];
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    ProcampVAAPIContext *ctx = vpp_ctx->priv;
     AVFrame *output_frame = NULL;
     VASurfaceID input_surface, output_surface;
     VAProcPipelineParameterBuffer params;
     VARectangle input_region;
     int err;
 
-    av_log(ctx, AV_LOG_DEBUG, "Filter input: %s, %ux%u (%"PRId64").\n",
+    av_log(avctx, AV_LOG_DEBUG, "Filter input: %s, %ux%u (%"PRId64").\n",
            av_get_pix_fmt_name(input_frame->format),
            input_frame->width, input_frame->height, input_frame->pts);
 
@@ -99,7 +98,7 @@ static int procamp_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame
         return AVERROR(EINVAL);
 
     input_surface = (VASurfaceID)(uintptr_t)input_frame->data[3];
-    av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for procamp input.\n",
+    av_log(avctx, AV_LOG_DEBUG, "Using surface %#x for procamp input.\n",
            input_surface);
 
     output_frame = ff_get_video_buffer(outlink, vpp_ctx->output_width,
@@ -110,7 +109,7 @@ static int procamp_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame
     }
 
     output_surface = (VASurfaceID)(uintptr_t)output_frame->data[3];
-    av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for procamp output.\n",
+    av_log(avctx, AV_LOG_DEBUG, "Using surface %#x for procamp output.\n",
            output_surface);
     memset(&params, 0, sizeof(params));
     input_region = (VARectangle) {
@@ -144,7 +143,7 @@ static int procamp_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame
         goto fail;
     av_frame_free(&input_frame);
 
-    av_log(ctx, AV_LOG_DEBUG, "Filter output: %s, %ux%u (%"PRId64").\n",
+    av_log(avctx, AV_LOG_DEBUG, "Filter output: %s, %ux%u (%"PRId64").\n",
            av_get_pix_fmt_name(output_frame->format),
            output_frame->width, output_frame->height, output_frame->pts);
 
