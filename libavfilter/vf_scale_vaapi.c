@@ -63,14 +63,13 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     AVFilterContext *avctx   = inlink->dst;
     AVFilterLink *outlink    = avctx->outputs[0];
     VAAPIVPPContext *vpp_ctx = avctx->priv;
-    ScaleVAAPIContext *ctx   = vpp_ctx->priv;
     AVFrame *output_frame    = NULL;
     VASurfaceID input_surface, output_surface;
     VAProcPipelineParameterBuffer params;
     VARectangle input_region;
     int err;
 
-    av_log(ctx, AV_LOG_DEBUG, "Filter input: %s, %ux%u (%"PRId64").\n",
+    av_log(avctx, AV_LOG_DEBUG, "Filter input: %s, %ux%u (%"PRId64").\n",
            av_get_pix_fmt_name(input_frame->format),
            input_frame->width, input_frame->height, input_frame->pts);
 
@@ -78,7 +77,7 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
         return AVERROR(EINVAL);
 
     input_surface = (VASurfaceID)(uintptr_t)input_frame->data[3];
-    av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for scale input.\n",
+    av_log(avctx, AV_LOG_DEBUG, "Using surface %#x for scale input.\n",
            input_surface);
 
     output_frame = ff_get_video_buffer(outlink, vpp_ctx->output_width,
@@ -89,7 +88,7 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
     }
 
     output_surface = (VASurfaceID)(uintptr_t)output_frame->data[3];
-    av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for scale output.\n",
+    av_log(avctx, AV_LOG_DEBUG, "Using surface %#x for scale output.\n",
            output_surface);
 
     memset(&params, 0, sizeof(params));
@@ -125,7 +124,7 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
 
     av_frame_free(&input_frame);
 
-    av_log(ctx, AV_LOG_DEBUG, "Filter output: %s, %ux%u (%"PRId64").\n",
+    av_log(avctx, AV_LOG_DEBUG, "Filter output: %s, %ux%u (%"PRId64").\n",
            av_get_pix_fmt_name(output_frame->format),
            output_frame->width, output_frame->height, output_frame->pts);
 
@@ -148,7 +147,7 @@ static av_cold int scale_vaapi_init(AVFilterContext *avctx)
     if (ctx->output_format_string) {
         vpp_ctx->output_format = av_get_pix_fmt(ctx->output_format_string);
         if (vpp_ctx->output_format == AV_PIX_FMT_NONE) {
-            av_log(ctx, AV_LOG_ERROR, "Invalid output format.\n");
+            av_log(avctx, AV_LOG_ERROR, "Invalid output format.\n");
             return AVERROR(EINVAL);
         }
     } else {
