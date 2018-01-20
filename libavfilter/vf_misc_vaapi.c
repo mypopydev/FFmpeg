@@ -40,15 +40,11 @@
 typedef struct DenoiseVAAPIContext {
     VAAPIVPPContext vpp_ctx; // must be the first fileld
 
-    const AVClass *class;
-
     int denoise;         // enable denoise algo.
 } DenoiseVAAPIContext;
 
 typedef struct SharpnessVAAPIContext {
     VAAPIVPPContext vpp_ctx; // must be the first fileld
-
-    const AVClass *class;
 
     int sharpness;       // enable sharpness.
 } SharpnessVAAPIContext;
