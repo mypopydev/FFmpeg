@@ -203,8 +203,7 @@ static const AVFilterPad scale_vaapi_outputs[] = {
 AVFilter ff_vf_scale_vaapi = {
     .name          = "scale_vaapi",
     .description   = NULL_IF_CONFIG_SMALL("Scale to/from VAAPI surfaces."),
-    .priv_size     = (sizeof(VAAPIVPPContext) +
-                      sizeof(ScaleVAAPIContext)),
+    .priv_size     = sizeof(ScaleVAAPIContext),
     .init          = &scale_vaapi_init,
     .uninit        = &ff_vaapi_vpp_ctx_uninit,
     .query_formats = &ff_vaapi_vpp_query_formats,
