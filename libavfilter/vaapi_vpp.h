@@ -28,6 +28,8 @@
 #include "avfilter.h"
 
 typedef struct VAAPIVPPContext {
+    const AVClass *class;
+
     AVVAAPIDeviceContext *hwctx;
     AVBufferRef *device_ref;
 
