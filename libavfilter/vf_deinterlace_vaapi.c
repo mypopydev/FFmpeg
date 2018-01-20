@@ -35,8 +35,6 @@
 typedef struct DeintVAAPIContext {
     VAAPIVPPContext vpp_ctx; // must be the first fileld
 
-    const AVClass *class;
-
     int                mode;
     int                field_rate;
     int                auto_enable;
