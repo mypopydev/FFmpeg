@@ -39,6 +39,7 @@ version <next>:
 - Removed the ffmenc and ffmdec muxer and demuxer
 - VideoToolbox HEVC encoder and hwaccel
 - VAAPI-accelerated ProcAmp(color balance) video filter
+- VAAPI-accelerated Misc(denoise/sharpness) video filter
 
 version 3.4:
 - deflicker video filter
