@@ -49,8 +49,6 @@
 typedef struct ProcampVAAPIContext {
     VAAPIVPPContext vpp_ctx; // must be the first fileld
 
-    const AVClass *class;
-
     float bright;
     float hue;
     float saturation;
