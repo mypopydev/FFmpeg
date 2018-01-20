@@ -33,8 +33,6 @@
 typedef struct ScaleVAAPIContext {
     VAAPIVPPContext vpp_ctx; // must be the first fileld
 
-    const AVClass *class;
-
     char *output_format_string;
 
     char *w_expr;      // width expression string
