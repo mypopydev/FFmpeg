@@ -33,7 +33,7 @@
 #define MAX_REFERENCES 8
 
 typedef struct DeintVAAPIContext {
-    VAAPIVPPContext vpp_ctx; // must be the first fileld
+    VAAPIVPPContext vpp_ctx; // must be the first field
 
     int                mode;
     int                field_rate;
@@ -285,8 +285,10 @@ static int deint_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
                 av_log(avctx, AV_LOG_ERROR, "Failed to unmap filter parameter "
                        "buffer: %d (%s).\n", vas, vaErrorStr(vas));
 
-            params.filters     = &vpp_ctx->filter_buffers[0];
-            params.num_filters = 1;
+            if (vpp_ctx->nb_filter_buffers) {
+                params.filters     = &vpp_ctx->filter_buffers[0];
+                params.num_filters = vpp_ctx->nb_filter_buffers;
+            }
 
             params.forward_references = forward_references;
             params.num_forward_references =
