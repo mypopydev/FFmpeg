@@ -71,7 +71,6 @@ static int denoise_vaapi_build_filter_params(AVFilterContext *avctx)
 
     VAProcFilterParameterBuffer denoise;
 
-    if (ctx->denoise != DENOISE_DEFAULT) {
         vas = vaQueryVideoProcFilterCaps(vpp_ctx->hwctx->display, vpp_ctx->va_context,
                                          VAProcFilterNoiseReduction,
                                          &caps, &num_caps);
@@ -87,7 +86,6 @@ static int denoise_vaapi_build_filter_params(AVFilterContext *avctx)
                              caps.range.max_value);
         ff_vaapi_vpp_make_param_buffers(avctx, VAProcFilterParameterBufferType,
                                         &denoise, sizeof(denoise), 1);
-    }
 
     return 0;
 }
@@ -104,7 +102,6 @@ static int sharpness_vaapi_build_filter_params(AVFilterContext *avctx)
 
     VAProcFilterParameterBuffer sharpness;
 
-    if (ctx->sharpness != SHARPNESS_DEFAULT) {
         vas = vaQueryVideoProcFilterCaps(vpp_ctx->hwctx->display, vpp_ctx->va_context,
                                          VAProcFilterSharpening,
                                          &caps, &num_caps);
@@ -122,7 +119,6 @@ static int sharpness_vaapi_build_filter_params(AVFilterContext *avctx)
         ff_vaapi_vpp_make_param_buffers(avctx,
                                         VAProcFilterParameterBufferType,
                                         &sharpness, sizeof(sharpness), 1);
-    }
 
     return 0;
 }
