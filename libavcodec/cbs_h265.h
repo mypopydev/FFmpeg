@@ -25,6 +25,15 @@
 #include "cbs_h2645.h"
 #include "hevc.h"
 
+enum {
+    // This limit is arbitrary - it is sufficient for one message of each
+    // type plus some repeats, and will therefore easily cover all sane
+    // streams.  However, it is possible to make technically-valid streams
+    // for which it will fail (for example, by including a large number of
+    // user-data-unregistered messages).
+    H265_MAX_SEI_PAYLOADS = 64,
+};
+
 
 typedef struct H265RawNALUnitHeader {
     uint8_t forbidden_zero_bit;
@@ -416,6 +425,105 @@ typedef struct H265RawAUD {
 
     uint8_t pic_type;
 } H265RawAUD;
+
+/*
+typedef struct H264RawSEIBufferingPeriod {
+    uint8_t seq_parameter_set_id;
+    struct {
+        uint32_t initial_cpb_removal_delay[H264_MAX_CPB_CNT];
+        uint32_t initial_cpb_removal_delay_offset[H264_MAX_CPB_CNT];
+    } nal, vcl;
+} H264RawSEIBufferingPeriod;
+*/
+
+typedef struct H265RawSEIPicTimestamp {
+    uint8_t units_field_based_flag;
+    uint8_t counting_type;
+    uint8_t full_timestamp_flag;
+    uint8_t discontinuity_flag;
+    uint8_t cnt_dropped_flag;
+    uint8_t n_frames;
+    uint8_t seconds_flag;
+    uint8_t seconds_value;
+    uint8_t minutes_flag;
+    uint8_t minutes_value;
+    uint8_t hours_flag;
+    uint8_t hours_value;
+    uint8_t time_offset_length;
+    uint32_t time_offset_value;
+} H265RawSEIPicTimestamp;
+
+typedef struct H265RawSEIPicTiming {
+    uint32_t cpb_removal_delay;
+    uint32_t dpb_output_delay;
+    uint8_t pic_struct;
+    uint8_t clock_timestamp_flag[3];
+    H265RawSEIPicTimestamp timestamp[3];
+} H265RawSEIPicTiming;
+
+typedef struct H265RawSEIUserDataRegistered {
+    uint8_t itu_t_t35_country_code;
+    uint8_t itu_t_t35_country_code_extension_byte;
+    uint8_t *data;
+    size_t data_length;
+    AVBufferRef *data_ref;
+} H265RawSEIUserDataRegistered;
+
+typedef struct H265RawSEIUserDataUnregistered {
+    uint8_t uuid_iso_iec_11578[16];
+    uint8_t *data;
+    size_t data_length;
+    AVBufferRef *data_ref;
+} H265RawSEIUserDataUnregistered;
+
+typedef struct H265RawSEIRecoveryPoint {
+    int16_t recovery_frame_cnt;
+    uint8_t exact_match_flag;
+    uint8_t broken_link_flag;
+} H265RawSEIRecoveryPoint;
+
+typedef struct H265RawSEIDisplayOrientation {
+    uint8_t display_orientation_cancel_flag;
+    uint8_t hor_flip;
+    uint8_t ver_flip;
+    uint16_t anticlockwise_rotation;
+    uint8_t display_orientation_persistence_flag;
+} H265RawSEIDisplayOrientation;
+
+typedef struct H265RawSEIDecodedPictureHash {
+    uint8_t hash_type;
+    union {
+        uint8_t md5[3][16];
+        uint16_t crc[3];
+        uint32_t checksum[3];
+    } digest;
+} H265RawSEIDecodedPictureHash;
+
+typedef struct H265RawSEIPayload {
+    uint32_t payload_type;
+    uint32_t payload_size;
+    union {
+        //H265RawSEIBufferingPeriod buffering_period;
+        //H265RawSEIPicTiming pic_timing;
+        // H265RawSEIFiller filler -> no fields.
+        H265RawSEIUserDataRegistered user_data_registered;
+        H265RawSEIUserDataUnregistered user_data_unregistered;
+        H265RawSEIRecoveryPoint recovery_point;
+        H265RawSEIDisplayOrientation display_orientation;
+        struct {
+            uint8_t *data;
+            size_t data_length;
+            AVBufferRef *data_ref;
+        } other;
+    } payload;
+} H265RawSEIPayload;
+
+typedef struct H265RawSEI {
+    H265RawNALUnitHeader nal_unit_header;
+
+    H265RawSEIPayload payload[H265_MAX_SEI_PAYLOADS];
+    uint8_t payload_count;
+} H265RawSEI;
 
 typedef struct  H265RawSliceHeader {
     H265RawNALUnitHeader nal_unit_header;
