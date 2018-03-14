@@ -452,6 +452,7 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
     int pad_idx = out->pad_idx;
     int ret;
     char name[255];
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(ofilter->format);
 
     snprintf(name, sizeof(name), "out_%d_%d", ost->file_index, ost->index);
     ret = avfilter_graph_create_filter(&ofilter->filter,
@@ -461,7 +462,8 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
     if (ret < 0)
         return ret;
 
-    if (ofilter->width || ofilter->height) {
+    if ((ofilter->width || ofilter->height) &&
+        (!desc || !(desc->flags & AV_PIX_FMT_FLAG_HWACCEL))) {
         char args[255];
         AVFilterContext *filter;
         AVDictionaryEntry *e = NULL;
