@@ -249,6 +249,7 @@ External library support:
   --enable-libopenmpt      enable decoding tracked files via libopenmpt [no]
   --enable-libopus         enable Opus de/encoding via libopus [no]
   --enable-libpulse        enable Pulseaudio input via libpulse [no]
+  --enable-libpython       enable Python script via libpython [no]
   --enable-librsvg         enable SVG rasterization via librsvg [no]
   --enable-librubberband   enable rubberband needed for rubberband filter [no]
   --enable-librtmp         enable RTMP[E] support via librtmp [no]
@@ -1699,6 +1700,7 @@ EXTERNAL_LIBRARY_LIST="
     libopenmpt
     libopus
     libpulse
+    libpython
     librsvg
     librtmp
     libshine
@@ -3357,6 +3359,7 @@ pp_filter_deps="gpl postproc"
 procamp_vaapi_filter_deps="vaapi VAProcPipelineParameterBuffer"
 program_opencl_filter_deps="opencl"
 pullup_filter_deps="gpl"
+python_filter_deps="python"
 removelogo_filter_deps="avcodec avformat swscale"
 repeatfields_filter_deps="gpl"
 resample_filter_deps="avresample"
@@ -6023,6 +6026,7 @@ enabled libopus           && {
     }
 }
 enabled libpulse          && require_pkg_config libpulse libpulse pulse/pulseaudio.h pa_context_new
+enabled libpython         && require_pkg_config python python Python.h Py_Initialize
 enabled librsvg           && require_pkg_config librsvg librsvg-2.0 librsvg-2.0/librsvg/rsvg.h rsvg_handle_render_cairo
 enabled librtmp           && require_pkg_config librtmp librtmp librtmp/rtmp.h RTMP_Socket
 enabled librubberband     && require_pkg_config librubberband "rubberband >= 1.8.1" rubberband/rubberband-c.h rubberband_new -lstdc++ && append librubberband_extralibs "-lstdc++"
