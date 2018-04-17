@@ -25,6 +25,7 @@
  * @see https://en.wikipedia.org/wiki/Canny_edge_detector
  */
 #include <Python.h>
+#include <numpy/arrayobject.h>
 
 #include "libavutil/avassert.h"
 #include "libavutil/opt.h"
@@ -52,6 +53,15 @@ typedef struct PythonContext {
     double   low, high;
     uint8_t  low_u8, high_u8;
     int mode;
+
+    const char *source_file;
+    PyObject *pName;
+    PyObject *pModule;
+
+    const char *func_name;
+    PyObject *pFunc;
+    const char *args;
+    PyObject *pArgs, *pValue;
 } PythonContext;
 
 #define OFFSET(x) offsetof(PythonContext, x)
@@ -62,6 +72,10 @@ static const AVOption python_options[] = {
     { "mode", "set mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=MODE_WIRES}, 0, NB_MODE-1, FLAGS, "mode" },
         { "wires",    "white/gray wires on black",  0, AV_OPT_TYPE_CONST, {.i64=MODE_WIRES},    INT_MIN, INT_MAX, FLAGS, "mode" },
         { "colormix", "mix colors",                 0, AV_OPT_TYPE_CONST, {.i64=MODE_COLORMIX}, INT_MIN, INT_MAX, FLAGS, "mode" },
+
+    { "source", "python source file", OFFSET(source_file), AV_OPT_TYPE_STRING, { .str = NULL }, .flags = FLAGS },
+    { "func", "function name in program", OFFSET(func_name), AV_OPT_TYPE_STRING, { .str = NULL }, .flags = FLAGS },
+    { "args", "function args", OFFSET(args), AV_OPT_TYPE_STRING, { .str = NULL }, .flags = FLAGS },
     { NULL }
 };
 
@@ -70,6 +84,12 @@ AVFILTER_DEFINE_CLASS(python);
 static av_cold int init(AVFilterContext *ctx)
 {
     PythonContext *python = ctx->priv;
+
+    Py_Initialize();
+
+    python->pName = PyString_FromString(python->source_file);
+    python->pModule = PyImport_Import(python->pName);
+    Py_DECREF(python->pName);
 
     python->low_u8  = python->low  * 255. + .5;
     python->high_u8 = python->high * 255. + .5;
@@ -113,6 +133,203 @@ static int config_props(AVFilterLink *inlink)
         if (!plane->tmpbuf || !plane->gradients || !plane->directions)
             return AVERROR(ENOMEM);
     }
+    return 0;
+}
+
+static int program_python_load(AVFilterContext *avctx)
+{
+#if 0
+    ProgramOpenCLContext *ctx = avctx->priv;
+    cl_int cle;
+    int err;
+
+    err = ff_opencl_filter_load_program_from_file(avctx, ctx->source_file);
+    if (err < 0)
+        return err;
+
+    ctx->command_queue = clCreateCommandQueue(ctx->ocf.hwctx->context,
+                                              ctx->ocf.hwctx->device_id,
+                                              0, &cle);
+    if (!ctx->command_queue) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to create OpenCL "
+               "command queue: %d.\n", cle);
+        return AVERROR(EIO);
+    }
+
+    ctx->kernel = clCreateKernel(ctx->ocf.program, ctx->kernel_name, &cle);
+    if (!ctx->kernel) {
+        if (cle == CL_INVALID_KERNEL_NAME) {
+            av_log(avctx, AV_LOG_ERROR, "Kernel function '%s' not found in "
+                   "program.\n", ctx->kernel_name);
+        } else {
+            av_log(avctx, AV_LOG_ERROR, "Failed to create kernel: %d.\n", cle);
+        }
+        return AVERROR(EIO);
+    }
+
+    ctx->loaded = 1;
+    return 0;
+#endif
+    return 0;
+}
+
+static int program_python_run(AVFilterContext *avctx)
+{
+#if 0
+    AVFilterLink     *outlink = avctx->outputs[0];
+    ProgramOpenCLContext *ctx = avctx->priv;
+    AVFrame *output = NULL;
+    cl_int cle;
+    size_t global_work[2];
+    cl_mem src, dst;
+    int err, input, plane;
+
+    if (!ctx->loaded) {
+        err = program_opencl_load(avctx);
+        if (err < 0)
+            return err;
+    }
+
+    output = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    if (!output) {
+        err = AVERROR(ENOMEM);
+        goto fail;
+    }
+
+    for (plane = 0; plane < FF_ARRAY_ELEMS(output->data); plane++) {
+        dst = (cl_mem)output->data[plane];
+        if (!dst)
+            break;
+
+        cle = clSetKernelArg(ctx->kernel, 0, sizeof(cl_mem), &dst);
+        if (cle != CL_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to set kernel "
+                   "destination image argument: %d.\n", cle);
+            err = AVERROR_UNKNOWN;
+            goto fail;
+        }
+        cle = clSetKernelArg(ctx->kernel, 1, sizeof(cl_uint), &ctx->index);
+        if (cle != CL_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to set kernel "
+                   "index argument: %d.\n", cle);
+            err = AVERROR_UNKNOWN;
+            goto fail;
+        }
+
+        for (input = 0; input < ctx->nb_inputs; input++) {
+            av_assert0(ctx->frames[input]);
+
+            src = (cl_mem)ctx->frames[input]->data[plane];
+            av_assert0(src);
+
+            cle = clSetKernelArg(ctx->kernel, 2 + input, sizeof(cl_mem), &src);
+            if (cle != CL_SUCCESS) {
+                av_log(avctx, AV_LOG_ERROR, "Failed to set kernel "
+                       "source image argument %d: %d.\n", input, cle);
+                err = AVERROR_UNKNOWN;
+                goto fail;
+            }
+        }
+
+        err = ff_opencl_filter_work_size_from_image(avctx, global_work,
+                                                    output, plane, 0);
+        if (err < 0)
+            goto fail;
+
+        av_log(avctx, AV_LOG_DEBUG, "Run kernel on plane %d "
+               "(%zux%zu).\n", plane, global_work[0], global_work[1]);
+
+        cle = clEnqueueNDRangeKernel(ctx->command_queue, ctx->kernel, 2, NULL,
+                                     global_work, NULL, 0, NULL, NULL);
+        if (cle != CL_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to enqueue kernel: %d.\n",
+                   cle);
+            err = AVERROR(EIO);
+            goto fail;
+        }
+    }
+
+    cle = clFinish(ctx->command_queue);
+    if (cle != CL_SUCCESS) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to finish command queue: %d.\n",
+               cle);
+        err = AVERROR(EIO);
+        goto fail;
+    }
+
+    if (ctx->nb_inputs > 0) {
+        err = av_frame_copy_props(output, ctx->frames[0]);
+        if (err < 0)
+            goto fail;
+    } else {
+        output->pts = ctx->index;
+    }
+    ++ctx->index;
+
+    av_log(ctx, AV_LOG_DEBUG, "Filter output: %s, %ux%u (%"PRId64").\n",
+           av_get_pix_fmt_name(output->format),
+           output->width, output->height, output->pts);
+
+    return ff_filter_frame(outlink, output);
+
+fail:
+    clFinish(ctx->command_queue);
+    av_frame_free(&output);
+    return err;
+#endif
+    return 0;
+}
+
+static int python(AVFilterContext *ctx, int nargs)
+{
+    const PythonContext *python = ctx->priv;
+    PyObject *pModule = python->pModule;
+    PyObject *pFunc = python->pFunc;
+    PyObject *pArgs = python->pArgs;
+    PyObject *pValue = python->pValue;
+    int i;
+
+    if (!pModule) {
+        PyErr_Print();
+        fprintf(stderr, "Failed to load \"%s\"\n",  python->source_file);
+        return 1;
+    }
+
+    pFunc = PyObject_GetAttrString(pModule, python->func_name);
+    /* pFunc is a new reference */
+    if (pFunc && PyCallable_Check(pFunc)) {
+        pArgs = PyTuple_New(nargs);
+        for (i = 0; i < nargs; ++i) {
+            pValue = PyInt_FromLong(nargs); // FIXME
+            if (!pValue) {
+                Py_DECREF(pArgs);
+                Py_DECREF(pModule);
+                fprintf(stderr, "Cannot convert argument\n");
+                return 1;
+            }
+            /* pValue reference stolen here: */
+            PyTuple_SetItem(pArgs, i, pValue);
+        }
+        pValue = PyObject_CallObject(pFunc, pArgs);
+        Py_DECREF(pArgs);
+        if (pValue != NULL) {
+            printf("Result of call: %ld\n", PyInt_AsLong(pValue));
+            Py_DECREF(pValue);
+        } else {
+            Py_DECREF(pFunc);
+            Py_DECREF(pModule);
+            PyErr_Print();
+            fprintf(stderr,"Call failed\n");
+            return 1;
+        }
+    } else {
+        if (PyErr_Occurred())
+            PyErr_Print();
+        fprintf(stderr, "Cannot find function \"%s\"\n",  python->func_name);
+    }
+    Py_XDECREF(pFunc);
+    Py_DECREF(pModule);
+
     return 0;
 }
 
