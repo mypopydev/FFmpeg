@@ -14,7 +14,7 @@ json_t *jsonrpc_error_object(int code, const char *message, json_t *data)
 
     if (!message)
         message = "";
-    
+
     json = json_pack("{s:i,s:s}", "code", code, "message", message);
     if (data) {
         json_object_set_new(json, "data", data);
@@ -54,8 +54,7 @@ json_t *jsonrpc_error_object_predefined(int code, json_t *data)
 json_t *jsonrpc_error_response(json_t *json_id, json_t *json_error)
 {
     /* json_error reference is stolen */
-
-    json_t * response;
+    json_t *response;
 
     /* json_id could be NULL */
     if (json_id) {
@@ -77,7 +76,7 @@ json_t *jsonrpc_result_response(json_t *json_id, json_t *json_result)
 {
     /*  json_result reference is stolen */
 
-    json_t * response;
+    json_t *response;
 
     /*  json_id shouldn't be NULL */
     if (json_id) {
@@ -112,8 +111,7 @@ json_t *jsonrpc_validate_request(json_t *json_request, const char **str_method, 
                         "jsonrpc", &str_version,
                         "method", str_method,
                         "params", json_params,
-                        "id", json_id
-	);
+                        "id", json_id);
     if (rc==-1) {
         data = json_string(error.text);
         goto invalid;
@@ -131,8 +129,9 @@ json_t *jsonrpc_validate_request(json_t *json_request, const char **str_method, 
         }
     }
 
-    /*  Note that we only return json_id in the error response after we have established that it is jsonrpc/2.0 compliant */
-    /*  otherwise we would be returning a non-compliant response ourselves! */
+    /*  Note that we only return json_id in the error response after we have
+     *  established that it is jsonrpc/2.0 compliant otherwise we would be
+     *  returning a non-compliant response ourselves! */
     valid_id = 1;
 
     if (*json_params) {
@@ -155,10 +154,10 @@ json_t *jsonrpc_validate_params(json_t *json_params, const char *params_spec)
 {
     json_t *data = NULL;
 
-    if (strlen(params_spec)==0) {	/*  empty string means no arguments */
+    if (strlen(params_spec) == 0) {	/*  empty string means no arguments */
         if (!json_params) {
             /*  no params field: OK */
-        } else if (json_is_array(json_params) && json_array_size(json_params)==0) {
+        } else if (json_is_array(json_params) && json_array_size(json_params) == 0) {
             /*  an empty Array: OK */
         } else {
             data = json_string("method takes no arguments");
@@ -169,7 +168,7 @@ json_t *jsonrpc_validate_params(json_t *json_params, const char *params_spec)
         size_t flags = JSON_VALIDATE_ONLY;
         json_error_t error;
         int rc = json_unpack_ex(json_params, &error, flags, params_spec);
-        if (rc==-1) {
+        if (rc == -1) {
             data = json_string(error.text);
         }
     }
@@ -279,5 +278,97 @@ char *jsonrpc_handler(const char *input, size_t input_len, struct jsonrpc_method
     json_decref(json_response);
 
     return output;
+}
+
+char *jsonrpc_parser(const char *input, size_t input_len,
+                      void *userdata)
+{
+    json_t *json_request, *json_response;
+    json_error_t error;
+    char *output = NULL;
+    char *in = NULL;
+
+    json_request = json_loadb(input, input_len, 0, &error);
+    if (!json_request) {
+        printf("Error when parser json-rpc.");
+        return NULL;
+    } else if (json_is_array(json_request)) {
+            size_t len = json_array_size(json_request);
+            if (len==0) {
+                 printf("Error when parser json-rpc.");
+                 return NULL;
+            } else {
+                size_t k;
+                json_response = NULL;
+                for (k=0; k < len; k++) {
+                    json_t *req = json_array_get(json_request, k);
+                    if (req) {
+                        in = json_dumps(req, JSON_INDENT(2));
+                        printf("%s\n", in);
+                        free(in);
+                    }
+                }
+            }
+	} else {
+        if (json_request) {
+            in = json_dumps(json_request, JSON_INDENT(2));
+            printf("%s\n", in);
+            free(in);
+        }
+    }
+
+    //if (json_request)
+    //    json_decref(json_request);
+
+    //printf("json response \n %s\n", output);
+
+    //return output;
+    return NULL;
+}
+
+char *jsonrpc_parser_file(const char *file,
+                          void *userdata)
+{
+    json_t *json_request, *json_response;
+    json_error_t error;
+    char *output = NULL;
+    char *in = NULL;
+
+    json_request = json_load_file(file, 0, &error);
+    if (!json_request) {
+        printf("Error when parser json-rpc.");
+        return NULL;
+    } else if (json_is_array(json_request)) {
+            size_t len = json_array_size(json_request);
+            if (len==0) {
+                 printf("Error when parser json-rpc.");
+                 return NULL;
+            } else {
+                size_t k;
+                json_response = NULL;
+                for (k=0; k < len; k++) {
+                    json_t *req = json_array_get(json_request, k);
+                    if (req) {
+                        in = json_dumps(req, JSON_INDENT(2));
+                        printf("%s\n", in);
+                        free(in);
+                    }
+                }
+            }
+	} else {
+        if (json_request) {
+            in = json_dumps(json_request, JSON_INDENT(2));
+            printf("%s\n", in);
+            free(in);
+        }
+    }
+
+    //if (json_request)
+    //    json_decref(json_request);
+
+    //printf("json response \n %s\n", output);
+
+    //return output;
+    return NULL;
 }
 

@@ -24,3 +24,7 @@ json_t *jsonrpc_validate_request(json_t *json_request, const char **str_method, 
 json_t *jsonrpc_validate_params(json_t *json_params, const char *params_spec);
 json_t *jsonrpc_handle_request_single(json_t *json_request, struct jsonrpc_method_entry_t method_table[],
                                       void *userdata);
+char *jsonrpc_parser(const char *input, size_t input_len,
+                     void *userdata);
+char *jsonrpc_parser_file(const char *file,
+                          void *userdata);

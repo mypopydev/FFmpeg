@@ -34,6 +34,8 @@
 #include "internal.h"
 #include "video.h"
 
+#include "jsonrpc.h"
+
 typedef struct PythonContext {
     const AVClass *class;
 
@@ -47,6 +49,9 @@ typedef struct PythonContext {
     PyObject *pArgs, *pValue;
 
     int nargs;
+
+    const char *rpc;
+    const char *rpcfile;
 } PythonContext;
 
 static av_cold int init(AVFilterContext *ctx)
@@ -55,9 +60,18 @@ static av_cold int init(AVFilterContext *ctx)
 
     Py_Initialize();
 
-    python->pName = PyString_FromString(python->source_file);
-    python->pModule = PyImport_Import(python->pName);
-    Py_DECREF(python->pName);
+    if (python->source_file) {
+        python->pName = PyString_FromString(python->source_file);
+        python->pModule = PyImport_Import(python->pName);
+        Py_DECREF(python->pName);
+    }
+
+    if (python->rpc)
+        jsonrpc_parser(python->rpc, strlen(python->rpc),
+                       python);
+
+    if (python->rpcfile)
+        jsonrpc_parser_file(python->rpcfile, python);
 
     return 0;
 }
@@ -191,6 +205,8 @@ static const AVOption python_options[] = {
     { "func", "function name in program", OFFSET(func_name), AV_OPT_TYPE_STRING, { .str = NULL }, .flags = FLAGS },
     { "args", "function args", OFFSET(args), AV_OPT_TYPE_STRING, { .str = NULL }, .flags = FLAGS },
     { "nargs", "function args number", OFFSET(nargs), AV_OPT_TYPE_INT,   { .i64 = 0 }, 0, INT_MAX, .flags = FLAGS },
+    { "rpc", "json-rpc format to python script", OFFSET(rpc), AV_OPT_TYPE_STRING, { .str = NULL }, .flags = FLAGS },
+    { "rpcfile", "read json-rpc from file", OFFSET(rpcfile), AV_OPT_TYPE_STRING, { .str = NULL }, .flags = FLAGS },
     { NULL }
 };
 
