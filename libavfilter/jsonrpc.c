@@ -280,8 +280,8 @@ char *jsonrpc_handler(const char *input, size_t input_len, struct jsonrpc_method
     return output;
 }
 
-char *jsonrpc_parser(const char *input, size_t input_len,
-                      void *userdata)
+json_t *jsonrpc_parser(const char *input, size_t input_len,
+                       void *userdata)
 {
     json_t *json_request, *json_response;
     json_error_t error;
@@ -323,11 +323,11 @@ char *jsonrpc_parser(const char *input, size_t input_len,
     //printf("json response \n %s\n", output);
 
     //return output;
-    return NULL;
+    return json_request;
 }
 
-char *jsonrpc_parser_file(const char *file,
-                          void *userdata)
+json_t *jsonrpc_parser_file(const char *file,
+                            void *userdata)
 {
     json_t *json_request, *json_response;
     json_error_t error;
@@ -336,7 +336,7 @@ char *jsonrpc_parser_file(const char *file,
 
     json_request = json_load_file(file, 0, &error);
     if (!json_request) {
-        printf("Error when parser json-rpc.");
+        printf("Error when parser json-rpc: %s\n", file);
         return NULL;
     } else if (json_is_array(json_request)) {
             size_t len = json_array_size(json_request);
@@ -363,12 +363,6 @@ char *jsonrpc_parser_file(const char *file,
         }
     }
 
-    //if (json_request)
-    //    json_decref(json_request);
-
-    //printf("json response \n %s\n", output);
-
-    //return output;
-    return NULL;
+    return json_request;
 }
 

@@ -39,7 +39,7 @@
 typedef struct PythonContext {
     const AVClass *class;
 
-    const char *source_file;
+    const char *source_file; /* python file */
     PyObject *pName;
     PyObject *pModule;
 
@@ -51,12 +51,22 @@ typedef struct PythonContext {
     int nargs;
 
     const char *rpc;
-    const char *rpcfile;
+    const char *rpcfile; /* json-rpc file */
+
+    const char *cmd;
+
+    json_t *requests;
+
+    uint64_t index;
 } PythonContext;
+
+static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVFrame *in);
 
 static av_cold int init(AVFilterContext *ctx)
 {
     PythonContext *python = ctx->priv;
+    int i;
+    int len = 0;
 
     Py_Initialize();
 
@@ -67,11 +77,18 @@ static av_cold int init(AVFilterContext *ctx)
     }
 
     if (python->rpc)
-        jsonrpc_parser(python->rpc, strlen(python->rpc),
-                       python);
+        python->requests = jsonrpc_parser(python->rpc, strlen(python->rpc),
+                                          python);
 
     if (python->rpcfile)
-        jsonrpc_parser_file(python->rpcfile, python);
+        python->requests = jsonrpc_parser_file(python->rpcfile, python);
+
+    len = json_array_size(python->requests);
+    for (i=0; i < len; i++) {
+        json_t *request = json_array_get(python->requests, i);
+        printf(" == Type : %d\n",  json_typeof(request));
+        jsonrpc_request(ctx, request, NULL);
+    }
 
     return 0;
 }
@@ -113,6 +130,138 @@ static int program_python_load(AVFilterContext *avctx)
 static int program_python_run(AVFilterContext *avctx)
 {
     return 0;
+}
+
+static int run_python_rpc(json_t *req)
+{
+    return 0;
+}
+
+static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVFrame *in)
+{
+    size_t flags = 0;
+    json_error_t error;
+    const char *str_version = NULL;
+    int rc;
+    json_t *data = NULL;
+    int valid_id = 0;
+    const char *str_method = NULL;
+    json_t *json_params = NULL;
+    json_t *json_id = NULL;
+
+    const PythonContext *python = avctx->priv;
+    PyObject *pModule =python->pModule;
+    PyObject *pFunc = NULL;
+    PyObject *pCallback = NULL;
+    PyObject *pCallbackRet = NULL;
+    PyObject *pArgs = NULL;
+    PyObject *pValue = NULL;
+
+    rc = json_unpack_ex(json_request, &error, flags, "{s:s,s:s,s?o,s?o}",
+                        "jsonrpc", &str_version,
+                        "method", &str_method,
+                        "params", &json_params,
+                        "id", &json_id);
+    if (rc==-1) {
+        data = json_string(error.text);
+        goto invalid;
+    }
+
+    if (0 != strcmp(str_version, "2.0")) {
+        data = json_string("\"jsonrpc\" MUST be exactly \"2.0\"");
+        goto invalid;
+    }
+
+    if (json_id) {
+        if (!json_is_string(json_id) && !json_is_number(json_id) && !json_is_null(json_id)) {
+            data = json_string("\"id\" MUST contain a String, Number, or NULL value if included");
+            goto invalid;
+        }
+    }
+
+    /*  Note that we only return json_id in the error response after we have
+     *  established that it is jsonrpc/2.0 compliant otherwise we would be
+     *  returning a non-compliant response ourselves! */
+    valid_id = 1;
+#if 0
+    if (!pModule) {
+        PyErr_Print();
+        fprintf(stderr, "Failed to load python file\"%s\"\n",  python->source_file);
+        goto invalid;
+    }
+
+    pFunc = PyObject_GetAttrString(pModule, str_method);
+    /* pFunc is a new reference */
+    if (pFunc && PyCallable_Check(pFunc) && json_params) {
+#endif
+
+        if (!json_is_array(json_params)) {
+            data = json_string("\"params\" MUST be Array if included");
+            goto invalid;
+        }
+
+        size_t len = json_array_size(json_params);
+        const char *callback = NULL;
+        const char *cmd = NULL;
+        int nframes;
+        json_t *info = NULL;
+        pArgs = PyTuple_New(len);
+
+        /* use s,s,i,[],AVFrame and AVFrame always the last one param in rpc call
+         *     Callback(s), command list(s), frame index(i), information for next round([]), AVframe
+         */
+        rc = json_unpack_ex(json_params, &error, flags, "[s,s,i,[]]", &callback, &cmd, &nframes, &info);
+        if (rc == 0) {
+            PyObject *p;
+            PyObject *info;
+            //PyObject *nframes;
+
+            printf("param : %s\n",  callback);
+            printf("param : %s\n",  cmd);
+            pCallback = PyObject_GetAttrString(pModule, callback);
+            if (pCallback && PyCallable_Check(pCallback)) {
+                PyObject *pCmds = PyTuple_New(1);
+                PyTuple_SetItem(pCmds, 0, Py_BuildValue("s", cmd));
+                pCallbackRet = PyObject_CallObject(pCallback, pCmds);
+            }
+
+            printf("param : %d\n",  nframes);
+            //printf("param type : %d\n",  json_typeof(param));
+            pArgs = PyTuple_New(4); /* s, i, [], AVFrame */
+            PyTuple_SetItem(pArgs, 0, pCallbackRet);
+            PyTuple_SetItem(pArgs, 1, Py_BuildValue("i", nframes));
+            /* information for next round */
+            PyTuple_SetItem(pArgs, 2, Py_BuildValue("s", cmd));
+            PyTuple_SetItem(pArgs, 3, pCallbackRet);
+
+
+            pValue = PyObject_CallObject(pFunc, pArgs);
+
+        }
+        int i;
+        for (i=0; i < len; i++) {
+            json_t *param = json_array_get(json_params, i);
+            /*
+              json_t *rep = jsonrpc_handle_request_single(req, method_table, userdata);
+              if (rep) {
+              if (!json_response)
+              json_response = json_array();
+              json_array_append_new(json_response, rep);
+              }
+            */
+            printf("param type : %d\n",  json_typeof(param));
+        }
+#if 0
+    }
+#endif
+
+    return NULL;
+
+invalid:
+    if (!valid_id)
+        json_id = NULL;
+    return jsonrpc_error_response(json_id,
+                                  jsonrpc_error_object_predefined(JSONRPC_INVALID_REQUEST, data));
 }
 
 static int python_run(AVFilterContext *ctx, int nargs)
@@ -182,7 +331,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         goto fail;
     }
 
-    python_run(ctx, python->nargs);
+    //python_run(ctx, python->nargs);
 
     return ff_filter_frame(outlink, out);
 
