@@ -69,6 +69,8 @@ static av_cold int init(AVFilterContext *ctx)
     int len = 0;
 
     Py_Initialize();
+    PyRun_SimpleString("import sys");
+    PyRun_SimpleString("sys.path.append(\".\")");
 
     if (python->source_file) {
         python->pName = PyString_FromString(python->source_file);
@@ -214,7 +216,6 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
         if (rc == 0) {
             PyObject *p;
             PyObject *info;
-            //PyObject *nframes;
 
             printf("param : %s\n",  callback);
             printf("param : %s\n",  cmd);
@@ -232,7 +233,8 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
             PyTuple_SetItem(pArgs, 1, Py_BuildValue("i", nframes));
             /* information for next round */
             PyTuple_SetItem(pArgs, 2, Py_BuildValue("s", cmd));
-            PyTuple_SetItem(pArgs, 3, pCallbackRet);
+
+            PyTuple_SetItem(pArgs, 3, pCallbackRet); /* FIXME */
 
 
             pValue = PyObject_CallObject(pFunc, pArgs);
