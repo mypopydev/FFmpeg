@@ -13,37 +13,37 @@ class ExecuteUnit(object):
 class BallDetection(ExecuteUnit):
     def execute(self, cmds):
         print("BallDetection   cmd: ", cmds)
-        return "BallDetection      cmd: ".join(str(x) for x in cmds)
+        return self.__class__.__name__ + " "  + " ".join(str(x) for x in cmds)
 
 class BallTracking(ExecuteUnit):
     def execute(self, cmds):
         print("BallTracking    cmd: ", cmds)
-        return "BallTracking      cmd: ".join(str(x) for x in cmds)
+        return self.__class__.__name__ + " "  + " ".join(str(x) for x in cmds)
 
 class BallFusion(ExecuteUnit):
     def execute(self, cmds):
         print("BallFusion      cmd: ", cmds)
-        return "BallFusion      cmd: ".join(str(x) for x in cmds)
+        return self.__class__.__name__ + " "  + " ".join(str(x) for x in cmds)
 
 class PlayerDetection(ExecuteUnit):
     def execute(self, cmds):
         print("PlayerDetection cmd: ", cmds)
-        return "PlayerDetection cmd: ".join(str(x) for x in cmds)
+        return self.__class__.__name__ + " "  + " ".join(str(x) for x in cmds)
 
 class PlayerTracking(ExecuteUnit):
     def execute(self, cmds):
         print("PlayerTracking  cmd: ", cmds)
-        return "PlayerTracking  cmd: ".join(str(x) for x in cmds)
+        return self.__class__.__name__ + " "  + " ".join(str(x) for x in cmds)
 
 class PlayerFusion(ExecuteUnit):
     def execute(self, cmds):
         print("PlayerFusion    cmd: ", cmds)
-        return "PlayerFusion    cmd: ".join(str(x) for x in cmds)
+        return self.__class__.__name__ + " "  + " ".join(str(x) for x in cmds)
 
 class Encoder(ExecuteUnit):
     def execute(self, cmds):
         print("Encoder         cmd: ", cmds)
-        return "Encoder         cmd: ".join(str(x) for  x in cmds)
+        return self.__class__.__name__ + " "  + " ".join(str(x) for  x in cmds)
     
 def get_execute_unit(params):
     print("cmds cmds[0] ", params)
