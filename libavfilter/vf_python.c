@@ -152,7 +152,7 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
     json_t *json_id = NULL;
 
     const PythonContext *python = avctx->priv;
-    PyObject *pModule =python->pModule;
+    PyObject *pModule = python->pModule;
     PyObject *pFunc = NULL;
     PyObject *pCallback = NULL;
     PyObject *pCallbackRet = NULL;
@@ -185,18 +185,15 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
      *  established that it is jsonrpc/2.0 compliant otherwise we would be
      *  returning a non-compliant response ourselves! */
     valid_id = 1;
-#if 0
-    if (!pModule) {
+    if (!python->pModule) {
         PyErr_Print();
-        fprintf(stderr, "Failed to load python file\"%s\"\n",  python->source_file);
+        fprintf(stderr, "Failed to load python file \"%s\"\n",  python->source_file);
         goto invalid;
     }
 
-    pFunc = PyObject_GetAttrString(pModule, str_method);
+    pFunc = PyObject_GetAttrString(python->pModule, str_method);
     /* pFunc is a new reference */
     if (pFunc && PyCallable_Check(pFunc) && json_params) {
-#endif
-
         if (!json_is_array(json_params)) {
             data = json_string("\"params\" MUST be Array if included");
             goto invalid;
@@ -217,28 +214,37 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
             PyObject *p;
             PyObject *info;
 
-            printf("param : %s\n",  callback);
-            printf("param : %s\n",  cmd);
-            pCallback = PyObject_GetAttrString(pModule, callback);
+            printf("param callback: %s\n",  callback);
+            printf("param cmd     : %s\n",  cmd);
+            pCallback = PyObject_GetAttrString(python->pModule, callback);
             if (pCallback && PyCallable_Check(pCallback)) {
                 PyObject *pCmds = PyTuple_New(1);
                 PyTuple_SetItem(pCmds, 0, Py_BuildValue("s", cmd));
                 pCallbackRet = PyObject_CallObject(pCallback, pCmds);
+                if (!pCallbackRet) {
+                    PyErr_Print();
+                    fprintf(stderr, "Failed to call \"%s\" with \"%s\"\n",  callback, cmd);
+                }
             }
 
-            printf("param : %d\n",  nframes);
+            printf("param nframes : %d\n",  nframes);
             //printf("param type : %d\n",  json_typeof(param));
             pArgs = PyTuple_New(4); /* s, i, [], AVFrame */
             PyTuple_SetItem(pArgs, 0, pCallbackRet);
             PyTuple_SetItem(pArgs, 1, Py_BuildValue("i", nframes));
-            /* information for next round */
+            /* XXX: information for next round */
             PyTuple_SetItem(pArgs, 2, Py_BuildValue("s", cmd));
 
-            PyTuple_SetItem(pArgs, 3, pCallbackRet); /* FIXME */
-
+            PyTuple_SetItem(pArgs, 3, Py_BuildValue("s", "image test")); /* FIXME */
 
             pValue = PyObject_CallObject(pFunc, pArgs);
-
+            if (!pValue) {
+                PyErr_Print();
+                //fprintf(stderr, "Failed to call \"%s\" with \"%s\"\n",  callback, cmd);
+            }
+            Py_XINCREF(pValue);
+            char *retvalue = PyString_AsString(pValue);
+            printf(" return %s \n", retvalue);
         }
         int i;
         for (i=0; i < len; i++) {
@@ -253,9 +259,7 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
             */
             printf("param type : %d\n",  json_typeof(param));
         }
-#if 0
     }
-#endif
 
     return NULL;
 
