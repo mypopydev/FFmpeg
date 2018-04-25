@@ -39,7 +39,7 @@
 typedef struct PythonContext {
     const AVClass *class;
 
-    const char *source_file; /* python file */
+    const char *source_file; /* python module file */
     PyObject *pName;
     PyObject *pModule;
 
@@ -148,6 +148,11 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
     const char *cmd = NULL;
     int nframes;
     json_t *info = NULL;
+    /* information for next round */
+    size_t index;
+    json_t *value;
+    char *info_str = NULL;
+    size_t len = 0;
 
     rc = json_unpack_ex(json_request, &error, flags, "{s:s,s:s,s?o,s?o}",
                         "jsonrpc", &str_version,
@@ -192,7 +197,7 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
         /* use s,s,i,[],AVFrame and AVFrame always the last one param in rpc call
          *     Callback(s), command list(s), frame index(i), information for next round([]), AVframe
          */
-        rc = json_unpack_ex(json_params, &error, flags, "[s,s,i,[]]", &callback, &cmd, &nframes, &info);
+        rc = json_unpack_ex(json_params, &error, flags, "[s,s,i,O]", &callback, &cmd, &nframes, &info);
         if (rc == 0) {
             av_log(avctx, AV_LOG_DEBUG, "param callback: %s\n",  callback);
             av_log(avctx, AV_LOG_DEBUG, "param cmd     : %s\n",  cmd);
@@ -211,8 +216,29 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
             pArgs = PyTuple_New(4); /* s, i, [], AVFrame */
             PyTuple_SetItem(pArgs, 0, pCallbackRet);
             PyTuple_SetItem(pArgs, 1, Py_BuildValue("i", nframes));
-            /* XXX: information for next round */
-            PyTuple_SetItem(pArgs, 2, Py_BuildValue("s", cmd));
+
+            json_array_foreach(info, index, value) {
+                len += json_string_length(value);
+            }
+
+            if (len > 0) {
+                len += (index + 1);
+                info_str = malloc(len);
+                if (!info_str) {
+                    av_log(avctx, AV_LOG_DEBUG, "malloc fail with len : %s \n", len);
+                    goto invalid;
+                }
+                info_str[0] = '\0';
+                json_array_foreach(info, index, value) {
+                    strcat(info_str, json_string_value(value));
+                    strcat(info_str, "|");
+
+                }
+                PyTuple_SetItem(pArgs, 2, Py_BuildValue("s", info_str));
+            } else {
+                PyTuple_SetItem(pArgs, 2, Py_BuildValue("s", " "));
+            }
+
             /* FIXME: map the surface to image */
             PyTuple_SetItem(pArgs, 3, Py_BuildValue("s", "image test")); /* FIXME */
 
