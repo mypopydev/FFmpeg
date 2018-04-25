@@ -88,7 +88,7 @@ static av_cold int init(AVFilterContext *ctx)
     len = json_array_size(python->requests);
     for (i=0; i < len; i++) {
         json_t *request = json_array_get(python->requests, i);
-        printf(" == Type : %d\n",  json_typeof(request));
+        av_log(ctx, AV_LOG_DEBUG, "Request type: %d.\n", json_typeof(request));
         jsonrpc_request(ctx, request, NULL);
     }
 
@@ -124,21 +124,6 @@ static int config_props(AVFilterLink *inlink)
     return 0;
 }
 
-static int program_python_load(AVFilterContext *avctx)
-{
-    return 0;
-}
-
-static int program_python_run(AVFilterContext *avctx)
-{
-    return 0;
-}
-
-static int run_python_rpc(json_t *req)
-{
-    return 0;
-}
-
 static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVFrame *in)
 {
     size_t flags = 0;
@@ -152,7 +137,6 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
     json_t *json_id = NULL;
 
     const PythonContext *python = avctx->priv;
-    PyObject *pModule = python->pModule;
     PyObject *pFunc = NULL;
     PyObject *pCallback = NULL;
     PyObject *pCallbackRet = NULL;
@@ -187,7 +171,7 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
     valid_id = 1;
     if (!python->pModule) {
         PyErr_Print();
-        fprintf(stderr, "Failed to load python file \"%s\"\n",  python->source_file);
+        av_log(avctx, AV_LOG_ERROR, "Failed to load python file \"%s\"\n",  python->source_file);
         goto invalid;
     }
 
@@ -214,8 +198,8 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
             PyObject *p;
             PyObject *info;
 
-            printf("param callback: %s\n",  callback);
-            printf("param cmd     : %s\n",  cmd);
+            av_log(avctx, AV_LOG_DEBUG, "param callback: %s\n",  callback);
+            av_log(avctx, AV_LOG_DEBUG, "param cmd     : %s\n",  cmd);
             pCallback = PyObject_GetAttrString(python->pModule, callback);
             if (pCallback && PyCallable_Check(pCallback)) {
                 PyObject *pCmds = PyTuple_New(1);
@@ -223,11 +207,11 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
                 pCallbackRet = PyObject_CallObject(pCallback, pCmds);
                 if (!pCallbackRet) {
                     PyErr_Print();
-                    fprintf(stderr, "Failed to call \"%s\" with \"%s\"\n",  callback, cmd);
+                    av_log(avctx, AV_LOG_ERROR, "Failed to call \"%s\" with \"%s\"\n",  callback, cmd);
                 }
             }
 
-            printf("param nframes : %d\n",  nframes);
+            av_log(avctx, AV_LOG_DEBUG, "param nframes : %d\n",  nframes);
             //printf("param type : %d\n",  json_typeof(param));
             pArgs = PyTuple_New(4); /* s, i, [], AVFrame */
             PyTuple_SetItem(pArgs, 0, pCallbackRet);
@@ -244,20 +228,12 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
             }
             Py_XINCREF(pValue);
             char *retvalue = PyString_AsString(pValue);
-            printf(" return %s \n", retvalue);
+            av_log(avctx, AV_LOG_DEBUG, " return %s \n", retvalue);
         }
         int i;
         for (i=0; i < len; i++) {
             json_t *param = json_array_get(json_params, i);
-            /*
-              json_t *rep = jsonrpc_handle_request_single(req, method_table, userdata);
-              if (rep) {
-              if (!json_response)
-              json_response = json_array();
-              json_array_append_new(json_response, rep);
-              }
-            */
-            printf("param type : %d\n",  json_typeof(param));
+            av_log(avctx, AV_LOG_DEBUG, "param type : %d\n",  json_typeof(param));
         }
     }
 
@@ -268,59 +244,6 @@ invalid:
         json_id = NULL;
     return jsonrpc_error_response(json_id,
                                   jsonrpc_error_object_predefined(JSONRPC_INVALID_REQUEST, data));
-}
-
-static int python_run(AVFilterContext *ctx, int nargs)
-{
-    const PythonContext *python = ctx->priv;
-    PyObject *pModule = python->pModule;
-    PyObject *pFunc = python->pFunc;
-    PyObject *pArgs = python->pArgs;
-    PyObject *pValue = python->pValue;
-    int i;
-
-    if (!pModule) {
-        PyErr_Print();
-        fprintf(stderr, "Failed to load \"%s\"\n",  python->source_file);
-        return 1;
-    }
-
-    pFunc = PyObject_GetAttrString(pModule, python->func_name);
-    /* pFunc is a new reference */
-    if (pFunc && PyCallable_Check(pFunc)) {
-        pArgs = PyTuple_New(nargs);
-        for (i = 0; i < nargs; ++i) {
-            pValue = PyInt_FromLong(2); // FIXME
-            if (!pValue) {
-                Py_DECREF(pArgs);
-                Py_DECREF(pModule);
-                fprintf(stderr, "Cannot convert argument\n");
-                return 1;
-            }
-            /* pValue reference stolen here: */
-            PyTuple_SetItem(pArgs, i, pValue);
-        }
-        pValue = PyObject_CallObject(pFunc, pArgs);
-        Py_DECREF(pArgs);
-        if (pValue != NULL) {
-            printf("Result of call: %ld\n", PyInt_AsLong(pValue));
-            Py_DECREF(pValue);
-        } else {
-            Py_DECREF(pFunc);
-            Py_DECREF(pModule); // FIXME
-            PyErr_Print();
-            fprintf(stderr,"Call failed\n");
-            return 1;
-        }
-    } else {
-        if (PyErr_Occurred())
-            PyErr_Print();
-        fprintf(stderr, "Cannot find function \"%s\"\n",  python->func_name);
-    }
-    Py_XDECREF(pFunc);
-    Py_DECREF(pModule); // FIXME
-
-    return 0;
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
