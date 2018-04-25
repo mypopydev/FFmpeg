@@ -100,6 +100,7 @@ static int query_formats(AVFilterContext *ctx)
     const PythonContext *python = ctx->priv;
     enum AVPixelFormat pix_fmts[] = {
          AV_PIX_FMT_NV12,
+         AV_PIX_FMT_ARGB,
          AV_PIX_FMT_VAAPI,
          AV_PIX_FMT_NONE,
     };
@@ -117,7 +118,6 @@ static int query_formats(AVFilterContext *ctx)
 
 static int config_props(AVFilterLink *inlink)
 {
-    int p;
     AVFilterContext *ctx = inlink->dst;
     PythonContext *python = ctx->priv;
 
@@ -142,6 +142,12 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
     PyObject *pCallbackRet = NULL;
     PyObject *pArgs = NULL;
     PyObject *pValue = NULL;
+    char *retvalue = NULL;
+
+    const char *callback = NULL;
+    const char *cmd = NULL;
+    int nframes;
+    json_t *info = NULL;
 
     rc = json_unpack_ex(json_request, &error, flags, "{s:s,s:s,s?o,s?o}",
                         "jsonrpc", &str_version,
@@ -183,21 +189,11 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
             goto invalid;
         }
 
-        size_t len = json_array_size(json_params);
-        const char *callback = NULL;
-        const char *cmd = NULL;
-        int nframes;
-        json_t *info = NULL;
-        pArgs = PyTuple_New(len);
-
         /* use s,s,i,[],AVFrame and AVFrame always the last one param in rpc call
          *     Callback(s), command list(s), frame index(i), information for next round([]), AVframe
          */
         rc = json_unpack_ex(json_params, &error, flags, "[s,s,i,[]]", &callback, &cmd, &nframes, &info);
         if (rc == 0) {
-            PyObject *p;
-            PyObject *info;
-
             av_log(avctx, AV_LOG_DEBUG, "param callback: %s\n",  callback);
             av_log(avctx, AV_LOG_DEBUG, "param cmd     : %s\n",  cmd);
             pCallback = PyObject_GetAttrString(python->pModule, callback);
@@ -212,28 +208,20 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
             }
 
             av_log(avctx, AV_LOG_DEBUG, "param nframes : %d\n",  nframes);
-            //printf("param type : %d\n",  json_typeof(param));
             pArgs = PyTuple_New(4); /* s, i, [], AVFrame */
             PyTuple_SetItem(pArgs, 0, pCallbackRet);
             PyTuple_SetItem(pArgs, 1, Py_BuildValue("i", nframes));
             /* XXX: information for next round */
             PyTuple_SetItem(pArgs, 2, Py_BuildValue("s", cmd));
-
+            /* FIXME: map the surface to image */
             PyTuple_SetItem(pArgs, 3, Py_BuildValue("s", "image test")); /* FIXME */
 
             pValue = PyObject_CallObject(pFunc, pArgs);
             if (!pValue) {
                 PyErr_Print();
-                //fprintf(stderr, "Failed to call \"%s\" with \"%s\"\n",  callback, cmd);
             }
-            Py_XINCREF(pValue);
-            char *retvalue = PyString_AsString(pValue);
+            retvalue = PyString_AsString(pValue);
             av_log(avctx, AV_LOG_DEBUG, " return %s \n", retvalue);
-        }
-        int i;
-        for (i=0; i < len; i++) {
-            json_t *param = json_array_get(json_params, i);
-            av_log(avctx, AV_LOG_DEBUG, "param type : %d\n",  json_typeof(param));
         }
     }
 
@@ -271,7 +259,6 @@ fail:
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
-    int p;
     PythonContext *python = ctx->priv;
 }
 
