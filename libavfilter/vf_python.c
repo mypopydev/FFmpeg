@@ -247,6 +247,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         err = AVERROR(ENOMEM);
         goto fail;
     }
+    av_frame_free(&in);
 
     //python_run(ctx, python->nargs);
 
