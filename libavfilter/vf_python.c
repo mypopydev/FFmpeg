@@ -217,6 +217,7 @@ static json_t *jsonrpc_request(AVFilterContext *avctx, json_t *json_request, AVF
             PyTuple_SetItem(pArgs, 0, pCallbackRet);
             PyTuple_SetItem(pArgs, 1, Py_BuildValue("i", nframes));
 
+            /* info */
             json_array_foreach(info, index, value) {
                 len += json_string_length(value);
             }
