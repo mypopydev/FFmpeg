@@ -521,7 +521,11 @@ static int cbs_h2645_fragment_add_nals(CodedBitstreamContext *ctx,
         // Remove trailing zeroes.
         while (size > 0 && nal->data[size - 1] == 0)
             --size;
-        av_assert0(size > 0);
+        if (!size) {
+            av_log(ctx->log_ctx, AV_LOG_WARNING, "No slice data - that was just the header. "
+                   "Probably invalid unaligned padding on non-final NAL unit.\n");
+            continue;
+        }
 
         data = av_malloc(size + AV_INPUT_BUFFER_PADDING_SIZE);
         if (!data)
