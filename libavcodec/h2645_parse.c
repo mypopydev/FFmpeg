@@ -145,7 +145,7 @@ nsc:
     return si;
 }
 
-static const char *nal_unit_name(int nal_type)
+static const char *hevc_nal_unit_name(int nal_type)
 {
     switch(nal_type) {
     case HEVC_NAL_TRAIL_N    : return "TRAIL_N";
@@ -239,7 +239,7 @@ static int hevc_parse_nal_header(H2645NAL *nal, void *logctx)
 
     av_log(logctx, AV_LOG_DEBUG,
            "nal_unit_type: %d(%s), nuh_layer_id: %d, temporal_id: %d\n",
-           nal->type, nal_unit_name(nal->type), nuh_layer_id, nal->temporal_id);
+           nal->type, hevc_nal_unit_name(nal->type), nuh_layer_id, nal->temporal_id);
 
     return nuh_layer_id == 0;
 }
