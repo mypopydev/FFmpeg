@@ -28,6 +28,7 @@
 
 #include "bytestream.h"
 #include "hevc.h"
+#include "h264.h"
 #include "h2645_parse.h"
 
 int ff_h2645_extract_rbsp(const uint8_t *src, int length,
@@ -193,6 +194,27 @@ static const char *hevc_nal_unit_name(int nal_type)
     }
 }
 
+static const char *h264_nal_unit_name(int nal_type)
+{
+    switch(nal_type) {
+    case H264_NAL_SLICE           : return "SLICE";
+    case H264_NAL_DPA             : return "DPA";
+    case H264_NAL_DPB             : return "DPB";
+    case H264_NAL_DPC             : return "DPC";
+    case H264_NAL_IDR_SLICE       : return "IDR_SLICE";
+    case H264_NAL_SEI             : return "SEI";
+    case H264_NAL_SPS             : return "SPS";
+    case H264_NAL_PPS             : return "PPS";
+    case H264_NAL_AUD             : return "AUD";
+    case H264_NAL_END_SEQUENCE    : return "END_SEQUENCE";
+    case H264_NAL_END_STREAM      : return "END_STREAM";
+    case H264_NAL_FILLER_DATA     : return "FILLER_DATA";
+    case H264_NAL_SPS_EXT         : return "SPS_EXT";
+    case H264_NAL_AUXILIARY_SLICE : return "AUXILIARY_SLICE";
+    default : return "?";
+    }
+}
+
 static int get_bit_length(H2645NAL *nal, int skip_trailing_zeros)
 {
     int size = nal->size;
@@ -255,8 +277,8 @@ static int h264_parse_nal_header(H2645NAL *nal, void *logctx)
     nal->type    = get_bits(gb, 5);
 
     av_log(logctx, AV_LOG_DEBUG,
-           "nal_unit_type: %d, nal_ref_idc: %d\n",
-           nal->type, nal->ref_idc);
+           "nal_unit_type: %d(%s), nal_ref_idc: %d\n",
+           nal->type, h264_nal_unit_name(nal->type), nal->ref_idc);
 
     return 1;
 }
