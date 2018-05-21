@@ -742,6 +742,23 @@ static int vaapi_map_frame(AVHWFramesContext *hwfc,
         av_log(hwfc, AV_LOG_ERROR, "Failed to sync surface "
                "%#x: %d (%s).\n", surface_id, vas, vaErrorStr(vas));
         err = AVERROR(EIO);
+        /* query decode detail error */
+        if (vas == VA_STATUS_ERROR_DECODING_ERROR) {
+            VASurfaceDecodeMBErrors *dec_err = NULL;
+            int i;
+            vas = vaQuerySurfaceError(hwctx->display, surface_id, VA_STATUS_ERROR_DECODING_ERROR,
+                                      (void **)&dec_err);
+            if (VA_STATUS_SUCCESS == vas) {
+                if (NULL != dec_err) {
+                    for (i = 0; dec_err[i].status != -1; i++) {
+                          av_log(hwfc, AV_LOG_ERROR, "Decoding deatils error, "
+                                 "type: %d, start mb: %d, end md: %d, num mbs: %d.\n",
+                                 dec_err[i].decode_error_type, dec_err[i].start_mb,
+                                 dec_err[i].end_mb, dec_err[i].num_mb);
+                    }
+                }
+            }
+        }
         goto fail;
     }
 
