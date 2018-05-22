@@ -100,6 +100,9 @@ static const struct {
     enum AVPixelFormat pix_fmt;
 } vaapi_format_map[] = {
     MAP(NV12, YUV420,  NV12),
+#ifdef VA_FOURCC_NV21
+    MAP(NV21, YUV420,  NV21),    // As NV12 with U and V reversed
+#endif
     MAP(YV12, YUV420,  YUV420P), // With U/V planes swapped.
     MAP(IYUV, YUV420,  YUV420P),
 #ifdef VA_FOURCC_I420
