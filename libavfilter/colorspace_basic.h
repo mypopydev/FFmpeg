@@ -16,14 +16,25 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVFILTER_OPENCL_SOURCE_H
-#define AVFILTER_OPENCL_SOURCE_H
+#ifndef AVFILTER_COLORSPACE_BASIC_H
+#define AVFILTER_COLORSPACE_BASIC_H
 
-extern const char *ff_opencl_source_avgblur;
-extern const char *ff_opencl_source_convolution;
-extern const char *ff_opencl_source_colorspace_basic;
-extern const char *ff_opencl_source_overlay;
-extern const char *ff_opencl_source_tonemap;
-extern const char *ff_opencl_source_unsharp;
+#include "libavutil/common.h"
 
-#endif /* AVFILTER_OPENCL_SOURCE_H */
+struct LumaCoefficients {
+    double cr, cg, cb;
+};
+
+struct ColorPrimaries {
+    double xr, yr, xg, yg, xb, yb;
+};
+
+struct WhitePoint {
+    double xw, yw;
+};
+
+void invert_matrix3x3(const double in[3][3], double out[3][3]);
+void mul3x3(double dst[3][3], const double src1[3][3], const double src2[3][3]);
+void fill_rgb2xyz_table(const struct ColorPrimaries *coeffs,
+                        const struct WhitePoint *wp, double rgb2xyz[3][3]);
+#endif
