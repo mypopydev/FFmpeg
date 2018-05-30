@@ -2809,7 +2809,11 @@ static int opencl_map_from(AVHWFramesContext *hwfc, AVFrame *dst,
 static int opencl_map_to(AVHWFramesContext *hwfc, AVFrame *dst,
                          const AVFrame *src, int flags)
 {
+#if HAVE_OPENCL_DRM_BEIGNET || HAVE_OPENCL_VAAPI_BEIGNET || \
+    HAVE_OPENCL_VAAPI_INTEL_MEDIA || HAVE_OPENCL_DXVA2 || \
+    HAVE_OPENCL_D3D11 || HAVE_OPENCL_DRM_ARM
     OpenCLDeviceContext *priv = hwfc->device_ctx->internal->priv;
+#endif
     av_assert0(dst->format == AV_PIX_FMT_OPENCL);
     switch (src->format) {
 #if HAVE_OPENCL_DRM_BEIGNET
@@ -2850,7 +2854,11 @@ static int opencl_map_to(AVHWFramesContext *hwfc, AVFrame *dst,
 static int opencl_frames_derive_to(AVHWFramesContext *dst_fc,
                                    AVHWFramesContext *src_fc, int flags)
 {
+#if HAVE_OPENCL_DRM_BEIGNET || HAVE_OPENCL_VAAPI_BEIGNET || \
+    HAVE_OPENCL_VAAPI_INTEL_MEDIA || HAVE_OPENCL_DXVA2 || \
+    HAVE_OPENCL_D3D11 || HAVE_OPENCL_DRM_ARM
     OpenCLDeviceContext *priv = dst_fc->device_ctx->internal->priv;
+#endif
     switch (src_fc->device_ctx->type) {
 #if HAVE_OPENCL_DRM_BEIGNET
     case AV_HWDEVICE_TYPE_DRM:
