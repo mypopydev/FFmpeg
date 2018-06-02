@@ -6131,6 +6131,7 @@ enabled openal            && { { for al_extralibs in "${OPENAL_LIBS}" "-lopenal"
                                die "ERROR: openal must be installed and version must be 1.1 or compatible"; }
 enabled opencl            && { check_lib opencl OpenCL/cl.h clEnqueueNDRangeKernel -Wl,-framework,OpenCL ||
                                check_lib opencl CL/cl.h clEnqueueNDRangeKernel -lOpenCL ||
+                               check_pkg_config opencl OpenCL CL/cl.h clEnqueueNDRangeKernel -lOpenCL ||
                                die "ERROR: opencl not found"; } &&
                              { test_cpp_condition "OpenCL/cl.h" "defined(CL_VERSION_1_2)" ||
                                test_cpp_condition "CL/cl.h" "defined(CL_VERSION_1_2)" ||
@@ -6326,10 +6327,8 @@ fi
 
 if enabled_all opencl vaapi ; then
     enabled opencl_drm_beignet && enable opencl_vaapi_beignet
-    if enabled libmfx ; then
-        check_type "CL/cl.h CL/va_ext.h" "clCreateFromVA_APIMediaSurfaceINTEL_fn" &&
-            enable opencl_vaapi_intel_media
-    fi
+    check_type "CL/cl.h CL/va_ext.h" "clCreateFromVA_APIMediaSurfaceINTEL_fn" &&
+        enable opencl_vaapi_intel_media
 fi
 
 if enabled_all opencl dxva2 ; then
