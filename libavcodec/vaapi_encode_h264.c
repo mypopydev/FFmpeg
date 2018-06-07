@@ -585,6 +585,7 @@ static int vaapi_encode_h264_init_picture_params(AVCodecContext *avctx,
     H264RawSPS                       *sps = &priv->raw_sps;
     VAEncPictureParameterBufferH264 *vpic = pic->codec_picture_params;
     int i;
+    int slices;
 
     memset(&priv->current_access_unit, 0,
            sizeof(priv->current_access_unit));
@@ -700,7 +701,17 @@ static int vaapi_encode_h264_init_picture_params(AVCodecContext *avctx,
     vpic->pic_fields.bits.idr_pic_flag       = (pic->type == PICTURE_TYPE_IDR);
     vpic->pic_fields.bits.reference_pic_flag = (pic->type != PICTURE_TYPE_B);
 
-    pic->nb_slices = 1;
+    slices = 1;
+    if (ctx->max_slices) {
+        if (avctx->slices <= FFMIN(ctx->max_slices, priv->mb_height)) {
+            slices = FFMAX(avctx->slices, slices);
+        } else {
+            av_log(avctx, AV_LOG_ERROR, "The max slices number per frame "
+                   "cannot be more than %d.\n", FFMIN(ctx->max_slices, priv->mb_height));
+            return AVERROR(EINVAL);
+        }
+    }
+    pic->nb_slices = slices;
 
     return 0;
 }
@@ -716,6 +727,7 @@ static int vaapi_encode_h264_init_slice_params(AVCodecContext *avctx,
     VAEncPictureParameterBufferH264 *vpic = pic->codec_picture_params;
     VAEncSliceParameterBufferH264 *vslice = slice->codec_slice_params;
     int i;
+    int base, mod;
 
     if (pic->type == PICTURE_TYPE_IDR) {
         sh->nal_unit_header.nal_unit_type = H264_NAL_IDR_SLICE;
@@ -725,8 +737,13 @@ static int vaapi_encode_h264_init_slice_params(AVCodecContext *avctx,
         sh->nal_unit_header.nal_ref_idc   = pic->type != PICTURE_TYPE_B;
     }
 
-    // Only one slice per frame.
-    sh->first_mb_in_slice = 0;
+    base = priv->mb_height / pic->nb_slices;
+    mod  = priv->mb_height % pic->nb_slices;
+    if (slice->index < mod)
+        sh->first_mb_in_slice = slice->index * priv->mb_width * (base + 1);
+    else
+        sh->first_mb_in_slice = mod * priv->mb_width * (base + 1) +
+                                (slice->index - mod) * priv->mb_width * base;
     sh->slice_type        = priv->slice_type;
 
     sh->pic_parameter_set_id = pps->pic_parameter_set_id;
@@ -748,13 +765,19 @@ static int vaapi_encode_h264_init_slice_params(AVCodecContext *avctx,
 
 
     vslice->macroblock_address = sh->first_mb_in_slice;
-    vslice->num_macroblocks    = priv->mb_width * priv->mb_height;
+    if (slice->index < mod)
+        vslice->num_macroblocks = priv->mb_width * (base + 1);
+    else
+        vslice->num_macroblocks = priv->mb_width * base;
+    sh->slice_type        = priv->slice_type;
+    if (slice->index == pic->nb_slices - 1)
+        priv->idr_pic_count++;
 
     vslice->macroblock_info = VA_INVALID_ID;
 
     vslice->slice_type           = sh->slice_type % 5;
     vslice->pic_parameter_set_id = sh->pic_parameter_set_id;
-    vslice->idr_pic_id           = sh->idr_pic_id;
+    vslice->idr_pic_id           = priv->idr_pic_count;
 
     vslice->pic_order_cnt_lsb = sh->pic_order_cnt_lsb;
 
@@ -861,6 +884,12 @@ static av_cold int vaapi_encode_h264_configure(AVCodecContext *avctx)
             priv->sei_identifier.data        = priv->sei_identifier_string;
             priv->sei_identifier.data_length = len + 1;
         }
+    }
+
+    if (!ctx->max_slices && avctx->slices > 0) {
+        av_log(avctx, AV_LOG_ERROR, "The encode slice option is not "
+               "supported with the driver.\n");
+        return AVERROR(ENOSYS);
     }
 
     return 0;
