@@ -44,6 +44,8 @@ typedef struct VAAPIEncodeH265Context {
     unsigned int ctu_width;
     unsigned int ctu_height;
 
+    int last_ctu_index;
+
     int fixed_qp_idr;
     int fixed_qp_p;
     int fixed_qp_b;
@@ -618,6 +620,7 @@ static int vaapi_encode_h265_init_picture_params(AVCodecContext *avctx,
     VAAPIEncodeH265Options           *opt = ctx->codec_options;
     VAEncPictureParameterBufferHEVC *vpic = pic->codec_picture_params;
     int i;
+    int slices;
 
     if (pic->type == PICTURE_TYPE_IDR) {
         av_assert0(pic->display_order == pic->encode_order);
@@ -789,6 +792,19 @@ static int vaapi_encode_h265_init_picture_params(AVCodecContext *avctx,
     }
 
     pic->nb_slices = 1;
+    slices = 1;
+    if (ctx->max_slices) {
+        if (avctx->slices <= ctx->max_slices) {
+            slices = avctx->slices;
+        } else {
+            av_log(avctx, AV_LOG_ERROR, "The max slices number per frame "
+                   "cannot be more than %d.\n", ctx->max_slices);
+            return AVERROR_INVALIDDATA;
+        }
+    }
+    pic->nb_slices = slices;
+
+    priv->last_ctu_index = 0;
 
     return 0;
 }
@@ -814,9 +830,8 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
 
     sh->slice_pic_parameter_set_id      = pps->pps_pic_parameter_set_id;
 
-    // Currently we only support one slice per frame.
-    sh->first_slice_segment_in_pic_flag = 1;
-    sh->slice_segment_address           = 0;
+    sh->first_slice_segment_in_pic_flag = !!(priv->last_ctu_index == 0);
+    sh->slice_segment_address           = priv->last_ctu_index;
 
     sh->slice_type = priv->slice_type;
 
@@ -906,7 +921,8 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
 
     *vslice = (VAEncSliceParameterBufferHEVC) {
         .slice_segment_address = sh->slice_segment_address,
-        .num_ctu_in_slice      = priv->ctu_width * priv->ctu_height,
+        .num_ctu_in_slice      =
+        ((slice->index + 1) * priv->ctu_width * priv->ctu_height) / pic->nb_slices - priv->last_ctu_index,
 
         .slice_type                 = sh->slice_type,
         .slice_pic_parameter_set_id = sh->slice_pic_parameter_set_id,
@@ -927,7 +943,6 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
         .slice_tc_offset_div2   = sh->slice_tc_offset_div2,
 
         .slice_fields.bits = {
-            .last_slice_of_pic_flag       = 1,
             .dependent_slice_segment_flag = sh->dependent_slice_segment_flag,
             .colour_plane_id              = sh->colour_plane_id,
             .slice_temporal_mvp_enabled_flag =
@@ -945,6 +960,11 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
             .collocated_from_l0_flag      = sh->collocated_from_l0_flag,
         },
     };
+
+    priv->last_ctu_index += vslice->num_ctu_in_slice;
+
+    if (priv->last_ctu_index == priv->ctu_width * priv->ctu_height)
+        vslice->slice_fields.bits.last_slice_of_pic_flag = 1;
 
     for (i = 0; i < FF_ARRAY_ELEMS(vslice->ref_pic_list0); i++) {
         vslice->ref_pic_list0[i].picture_id = VA_INVALID_ID;
@@ -1018,6 +1038,10 @@ static av_cold int vaapi_encode_h265_configure(AVCodecContext *avctx)
     } else {
         av_assert0(0 && "Invalid RC mode.");
     }
+
+    if (!ctx->max_slices && avctx->slices > 0)
+        av_log(avctx, AV_LOG_WARNING, "The encode slice option is not "
+               "supported with the driver.\n");
 
     return 0;
 }
