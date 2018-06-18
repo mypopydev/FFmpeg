@@ -428,7 +428,8 @@ static int opencl_filter_device(AVHWDeviceContext *hwdev,
         }
 
         if (!(device_type & match_type)) {
-            av_log(hwdev, AV_LOG_DEBUG, "device_type does not match.\n");
+            av_log(hwdev, AV_LOG_DEBUG, "\"%s\" does not match device type \"%s\".\n",
+                   device_name, param->value);
             return 1;
         }
     }
@@ -550,6 +551,9 @@ static int opencl_device_create_internal(AVHWDeviceContext *hwdev,
             else
                 device_name = "Unknown Device";
 
+            av_log(hwdev, AV_LOG_VERBOSE, "%d.%d: %s / %s\n", p, d,
+                   platform_name, device_name);
+
             if (selector->filter_device) {
                 err = selector->filter_device(hwdev, devices[d],
                                               device_name,
@@ -559,9 +563,6 @@ static int opencl_device_create_internal(AVHWDeviceContext *hwdev,
                 if (err > 0)
                     continue;
             }
-
-            av_log(hwdev, AV_LOG_VERBOSE, "%d.%d: %s / %s\n", p, d,
-                   platform_name, device_name);
 
             ++found;
             platform_id      = platforms[p];
