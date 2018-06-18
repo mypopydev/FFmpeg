@@ -430,7 +430,8 @@ static int opencl_filter_device(AVHWDeviceContext *hwdev,
         }
 
         if (!(device_type & match_type)) {
-            av_log(hwdev, AV_LOG_DEBUG, "device_type does not match.\n");
+            av_log(hwdev, AV_LOG_DEBUG, "\"%s\" does not match device type \"%s\".\n",
+                   device_name, param->value);
             return 1;
         }
     }
