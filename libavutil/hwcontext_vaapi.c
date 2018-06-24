@@ -49,6 +49,7 @@
 #include "mem.h"
 #include "pixdesc.h"
 #include "pixfmt.h"
+#include "imgutils.h"
 
 
 typedef struct VAAPIDevicePriv {
@@ -753,7 +754,7 @@ static int vaapi_map_frame(AVHWFramesContext *hwfc,
     // assume for now that the user is not aware of that and would therefore
     // prefer not to be given direct-mapped memory if they request read access.
     if (ctx->derive_works && dst->format == hwfc->sw_format &&
-        ((flags & AV_HWFRAME_MAP_DIRECT) || !(flags & AV_HWFRAME_MAP_READ))) {
+        ((flags & AV_HWFRAME_MAP_DIRECT) || (flags & AV_HWFRAME_MAP_READ))) {
         vas = vaDeriveImage(hwctx->display, surface_id, &map->image);
         if (vas != VA_STATUS_SUCCESS) {
             av_log(hwfc, AV_LOG_ERROR, "Failed to derive image from "
@@ -769,7 +770,6 @@ static int vaapi_map_frame(AVHWFramesContext *hwfc,
             err = AVERROR(EIO);
             goto fail;
         }
-        map->flags |= AV_HWFRAME_MAP_DIRECT;
     } else {
         vas = vaCreateImage(hwctx->display, image_format,
                             hwfc->width, hwfc->height, &map->image);
@@ -839,7 +839,8 @@ static int vaapi_transfer_data_from(AVHWFramesContext *hwfc,
                                     AVFrame *dst, const AVFrame *src)
 {
     AVFrame *map;
-    int err;
+    int i,err;
+    ptrdiff_t src_linesize[4], dst_linesize[4];
 
     if (dst->width > hwfc->width || dst->height > hwfc->height)
         return AVERROR(EINVAL);
@@ -856,11 +857,12 @@ static int vaapi_transfer_data_from(AVHWFramesContext *hwfc,
     map->width  = dst->width;
     map->height = dst->height;
 
-    err = av_frame_copy(dst, map);
-    if (err)
-        goto fail;
-
-    err = 0;
+    for (i = 0; i < 4; i++) {
+        dst_linesize[i] = dst->linesize[i];
+        src_linesize[i] = map->linesize[i];
+    }
+    av_image_copy_uc_from(dst->data, dst_linesize, map->data, src_linesize,
+                          hwfc->sw_format, src->width, src->height);
 fail:
     av_frame_free(&map);
     return err;
