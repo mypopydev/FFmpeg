@@ -413,6 +413,13 @@ static int vaapi_encode_mpeg2_init_sequence_params(AVCodecContext *avctx)
     return 0;
 }
 
+#define RANGE_TO_F_CODE(range, fcode) { \
+    int fc = 1;                        \
+    while((4<<fc) < range && fc <= 15)    \
+    fc++;                               \
+    fcode = fc;                           \
+}
+
 static int vaapi_encode_mpeg2_init_picture_params(AVCodecContext *avctx,
                                                  VAAPIEncodePicture *pic)
 {
@@ -473,6 +480,60 @@ static int vaapi_encode_mpeg2_init_picture_params(AVCodecContext *avctx,
     vpic->f_code[1][0]       = pce->f_code[1][0];
     vpic->f_code[1][1]       = pce->f_code[1][1];
 
+    {
+        int mv_range_p[2], mv_range_b[2][2];
+        {
+            mv_range_p[0] = avctx->width < 200 ? 32 /*3*/ : avctx->width < 500 ? 64 /*4*/  : avctx->width < 1400 ? 128 /*5*/ : 256/*6*/;             // 200, 500, 1400 are horizontal resolution
+            mv_range_p[1] = mv_range_p[0] > 128 /*5*/ ? 128 /*5*/ : mv_range_p[0];
+        }
+        mv_range_b[0][0] =  mv_range_p[0];
+        mv_range_b[0][1] =  mv_range_p[1];
+        mv_range_b[1][0] =  mv_range_p[0];
+        mv_range_b[1][1] =  mv_range_p[1];
+        unsigned short bitstream_fcode = 0;
+
+        if (pic->type == PICTURE_TYPE_I || pic->type == PICTURE_TYPE_IDR)
+        {
+            bitstream_fcode = 0xffff;
+        }
+        else if (pic->type == PICTURE_TYPE_P)
+        {
+            bitstream_fcode = 0xff;
+
+            unsigned int fcode=0;
+            RANGE_TO_F_CODE (((int)mv_range_p[0]),fcode);
+            bitstream_fcode |= (fcode & 0x0f)<<12;
+
+            fcode=0;
+            RANGE_TO_F_CODE (((int)mv_range_p[1]), fcode);
+            bitstream_fcode |= (fcode & 0x0f)<<8;
+
+        }
+        else
+        {
+            unsigned int fcode=0;
+            RANGE_TO_F_CODE ((int)mv_range_b[0][0],fcode);
+            bitstream_fcode |= (fcode & 0x0f)<<12;
+
+            fcode=0;
+            RANGE_TO_F_CODE ((int)mv_range_b[0][1], fcode);
+            bitstream_fcode |= (fcode & 0x0f)<<8;
+
+            fcode=0;
+            RANGE_TO_F_CODE ((int)mv_range_b[1][0],fcode);
+            bitstream_fcode |= (fcode & 0x0f)<<4;
+
+            fcode=0;
+            RANGE_TO_F_CODE ((int)mv_range_b[1][1], fcode);
+            bitstream_fcode |= (fcode & 0x0f)<<0;
+        }
+
+        vpic->f_code[0][0]                   = (bitstream_fcode >> 12) & 0x0f;
+        vpic->f_code[0][1]                   = (bitstream_fcode >> 8 ) & 0x0f;
+        vpic->f_code[1][0]                   = (bitstream_fcode >> 4 ) & 0x0f;
+        vpic->f_code[1][1]                   = (bitstream_fcode >> 0 ) & 0x0f;
+    }
+
     pic->nb_slices = priv->mb_height;
 
     return 0;
@@ -487,7 +548,8 @@ static int vaapi_encode_mpeg2_init_slice_params(AVCodecContext *avctx,
     VAAPIEncodeMPEG2Context            *priv = ctx->priv_data;
     int qp;
 
-    vslice->macroblock_address = priv->mb_width * slice->index;
+    //vslice->macroblock_address = priv->mb_width * slice->index;
+    vslice->macroblock_address = slice->index;
     vslice->num_macroblocks    = priv->mb_width;
 
     switch (pic->type) {
@@ -567,11 +629,13 @@ static const VAAPIEncodeType vaapi_encode_type_mpeg2 = {
     .slice_params_size     = sizeof(VAEncSliceParameterBufferMPEG2),
     .init_slice_params     = &vaapi_encode_mpeg2_init_slice_params,
 
+#if 0
     .sequence_header_type  = VAEncPackedHeaderSequence,
     .write_sequence_header = &vaapi_encode_mpeg2_write_sequence_header,
 
     .picture_header_type   = VAEncPackedHeaderPicture,
     .write_picture_header  = &vaapi_encode_mpeg2_write_picture_header,
+#endif
 };
 
 static av_cold int vaapi_encode_mpeg2_init(AVCodecContext *avctx)
