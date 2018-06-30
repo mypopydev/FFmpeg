@@ -32,6 +32,8 @@
 #include "internal.h"
 #include "video.h"
 
+#include <immintrin.h>
+
 #define ME_MODE_BIDIR 0
 #define ME_MODE_BILAT 1
 
@@ -1119,6 +1121,7 @@ static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
                     height = AV_CEIL_RSHIFT(height, mi_ctx->log2_chroma_h);
                 }
 
+                #if 0
                 for (y = 0; y < height; y++) {
                     for (x = 0; x < width; x++) {
                         avf_out->data[plane][x + y * avf_out->linesize[plane]] =
@@ -1126,6 +1129,59 @@ static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
                              (ALPHA_MAX - alpha) * mi_ctx->frames[1].avf->data[plane][x + y * mi_ctx->frames[1].avf->linesize[plane]] + 512) >> 10;
                     }
                 }
+                #else
+                {
+                    __m128i *pA, *pB, *pD;
+                    __m128i A, B, D1, D2, alfa, beta, gamma, zero;
+                    unsigned short af1, af2, af3;
+
+                    af1 = (unsigned short)(alpha*256/1024);
+                    af2 = (unsigned short)((1024 - alpha)*256/1024);
+                    af3 = 128;
+                    alfa = _mm_set1_epi16(af1);
+                    beta = _mm_set1_epi16(af2);
+                    gamma = _mm_set1_epi16(af3);
+                    zero = _mm_setzero_si128();
+                    for (y = 0; y < height; y++) {
+                        pA = (__m128i *)&mi_ctx->frames[2].avf->data[plane][y * mi_ctx->frames[2].avf->linesize[plane]];
+                        pB = (__m128i *)&mi_ctx->frames[1].avf->data[plane][y * mi_ctx->frames[1].avf->linesize[plane]];
+                        pD = (__m128i *)&avf_out->data[plane][y * avf_out->linesize[plane]];
+                        /* pA, pB, and point to the beginning memory address of the image
+                           pixels in S1, S2, and D */
+                        int loop = width/8;
+                        for (x = 0; x < loop; x++) {
+                            A = _mm_unpacklo_epi8(*pA, zero);
+                            B = _mm_unpacklo_epi8(*pB, zero);
+                            A = _mm_mullo_epi16(A, alfa);
+                            B = _mm_mullo_epi16(B, beta);
+                            D1 = _mm_add_epi16(A, B);
+                            D1 = _mm_add_epi16(D1, gamma);
+                            D1 = _mm_srli_epi16(D1, 8);
+
+                            A = _mm_unpackhi_epi8(*pA, zero);
+                            B = _mm_unpackhi_epi8(*pB, zero);
+                            A = _mm_mullo_epi16(A, alfa);
+                            B = _mm_mullo_epi16(B, beta);
+                            D2 = _mm_add_epi16(A, B);
+                            D2 = _mm_add_epi16(D2, gamma);
+                            D2 = _mm_srli_epi16(D2, 8);
+
+                            *pD = _mm_packus_epi16(D1, D2);
+
+                            pA++;
+                            pB++;
+                            pD++;
+                        }
+
+                        for (x = loop * 8; x < width; x++) {
+                            avf_out->data[plane][x + y * avf_out->linesize[plane]] =
+                                (alpha  * mi_ctx->frames[2].avf->data[plane][x + y * mi_ctx->frames[2].avf->linesize[plane]] +
+                                 (ALPHA_MAX - alpha) * mi_ctx->frames[1].avf->data[plane][x + y * mi_ctx->frames[1].avf->linesize[plane]] + 512) >> 10;
+                        }
+
+                    }
+                }
+                #endif
             }
 
             break;
