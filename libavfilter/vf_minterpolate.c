@@ -197,6 +197,8 @@ typedef struct MIContext {
     int log2_chroma_w;
     int log2_chroma_h;
     int nb_planes;
+
+    MIDSPContext dsp;
 } MIContext;
 
 #define OFFSET(x) offsetof(MIContext, x)
@@ -300,10 +302,19 @@ static uint64_t get_sbad_ob(AVMotionEstContext *me_ctx, int x, int y, int x_mv, 
     y = av_clip(y, y_min, y_max);
     mv_x = av_clip(x_mv - x, -FFMIN(x - x_min, x_max - x), FFMIN(x - x_min, x_max - x));
     mv_y = av_clip(y_mv - y, -FFMIN(y - y_min, y_max - y), FFMIN(y - y_min, y_max - y));
-
+#if 0
     for (j = -me_ctx->mb_size / 2; j < me_ctx->mb_size * 3 / 2; j++)
         for (i = -me_ctx->mb_size / 2; i < me_ctx->mb_size * 3 / 2; i++)
             sbad += FFABS(data_cur[x + mv_x + i + (y + mv_y + j) * linesize] - data_next[x - mv_x + i + (y - mv_y + j) * linesize]);
+#else
+    {
+    uint8_t src1[1024], src2[1024];
+    uint8_t *cur = &data_cur[x + mv_x - me_ctx->mb_size / 2 + (y + mv_y  - me_ctx->mb_size / 2) * linesize];
+    uint8_t *next = &data_next[x - mv_x - me_ctx->mb_size / 2 + (y - mv_y - me_ctx->mb_size / 2) * linesize];
+    sbad = me_ctx->dsp.sse_sad(src1, src2, 0, 0);
+    //sbad = me_ctx->dsp.sse_sad(cur, next, linesize, linesize);
+    }
+#endif
 
     return sbad + (FFABS(mv_x1 - me_ctx->pred_x) + FFABS(mv_y1 - me_ctx->pred_y)) * COST_PRED_SCALE;
 }
@@ -396,6 +407,9 @@ static int config_input(AVFilterLink *inlink)
         me_ctx->get_cost = &get_sad_ob;
     else if (mi_ctx->me_mode == ME_MODE_BILAT)
         me_ctx->get_cost = &get_sbad_ob;
+
+    if (ARCH_X86)
+        ff_mi_init_x86(&me_ctx->dsp);
 
     return 0;
 fail:
