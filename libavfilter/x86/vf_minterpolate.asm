@@ -52,22 +52,27 @@ SECTION .text
 ;;     RET
 
 INIT_XMM sse2
-cglobal sad_16x16, 4, 7, 5, src, src_stride, dst, dst_stride, \
+cglobal sad_16x16, 4, 7, 9, src, src_stride, dst, dst_stride, \
         src_stride3, dst_stride3, cnt
      lea    src_stride3q, [src_strideq*3]
      lea    dst_stride3q, [dst_strideq*3]
      mov            cntd, 4
      pxor             m0, m0
 .loop:
-     mova             m1, [srcq+src_strideq*0]
-     mova             m2, [srcq+src_strideq*1]
-     mova             m3, [srcq+src_strideq*2]
-     mova             m4, [srcq+src_stride3q]
-     lea            srcq, [srcq+src_strideq*4]
-     psadbw           m1, [dstq+dst_strideq*0]
-     psadbw           m2, [dstq+dst_strideq*1]
-     psadbw           m3, [dstq+dst_strideq*2]
-     psadbw           m4, [dstq+dst_stride3q]
+     movu             m1, [srcq+src_strideq*0]
+     movu             m2, [srcq+src_strideq*1]
+     movu             m3, [srcq+src_strideq*2]
+     movu             m4, [srcq+src_stride3q]
+	lea            srcq, [srcq+src_strideq*4]
+	
+     movu             m5, [dstq+dst_strideq*0]
+     movu             m6, [dstq+dst_strideq*1]
+     movu             m7, [dstq+dst_strideq*2]
+     movu             m8, [dstq+dst_stride3q]
+     psadbw           m1, m5
+     psadbw           m2, m6
+     psadbw           m3, m7
+     psadbw           m4, m8
      lea            dstq, [dstq+dst_strideq*4]
      paddw            m1, m2
      paddw            m3, m4
