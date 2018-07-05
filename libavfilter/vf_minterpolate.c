@@ -311,8 +311,8 @@ static uint64_t get_sbad_ob(AVMotionEstContext *me_ctx, int x, int y, int x_mv, 
     uint8_t src1[1024], src2[1024];
     uint8_t *cur = &data_cur[x + mv_x - me_ctx->mb_size / 2 + (y + mv_y  - me_ctx->mb_size / 2) * linesize];
     uint8_t *next = &data_next[x - mv_x - me_ctx->mb_size / 2 + (y - mv_y - me_ctx->mb_size / 2) * linesize];
-    sbad = me_ctx->dsp.sse_sad(src1, src2, 0, 0);
-    //sbad = me_ctx->dsp.sse_sad(cur, next, linesize, linesize);
+    //sbad = me_ctx->dsp.sse_sad(src1, src2, 0, 0);
+    sbad = me_ctx->dsp.sse_sad(cur, linesize, next, linesize);
     }
 #endif
 
