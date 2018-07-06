@@ -308,7 +308,6 @@ static uint64_t get_sbad_ob(AVMotionEstContext *me_ctx, int x, int y, int x_mv, 
             sbad += FFABS(data_cur[x + mv_x + i + (y + mv_y + j) * linesize] - data_next[x - mv_x + i + (y - mv_y + j) * linesize]);
 #else
     {
-    uint8_t src1[1024], src2[1024];
     uint8_t *cur = &data_cur[x + mv_x - me_ctx->mb_size / 2 + (y + mv_y  - me_ctx->mb_size / 2) * linesize];
     uint8_t *next = &data_next[x - mv_x - me_ctx->mb_size / 2 + (y - mv_y - me_ctx->mb_size / 2) * linesize];
     //sbad = me_ctx->dsp.sse_sad(src1, src2, 0, 0);
@@ -971,8 +970,10 @@ static void set_frame_data(MIContext *mi_ctx, int alpha, AVFrame *avf_out)
                 for (i = 0; i < pixel_refs->nb; i++) {
                     Frame *frame = &mi_ctx->frames[pixel_refs->refs[i]];
                     if (chroma) {
-                        x_mv = (x >> mi_ctx->log2_chroma_w) + pixel_mvs->mvs[i][0] / (1 << mi_ctx->log2_chroma_w);
-                        y_mv = (y >> mi_ctx->log2_chroma_h) + pixel_mvs->mvs[i][1] / (1 << mi_ctx->log2_chroma_h);
+                        //x_mv = (x >> mi_ctx->log2_chroma_w) + pixel_mvs->mvs[i][0] / (1 << mi_ctx->log2_chroma_w);
+                        //y_mv = (y >> mi_ctx->log2_chroma_h) + pixel_mvs->mvs[i][1] / (1 << mi_ctx->log2_chroma_h);
+                        x_mv = (x + pixel_mvs->mvs[i][0]) >> mi_ctx->log2_chroma_w;
+                        y_mv = (y + pixel_mvs->mvs[i][1]) >> mi_ctx->log2_chroma_h;
                     } else {
                         x_mv = x + pixel_mvs->mvs[i][0];
                         y_mv = y + pixel_mvs->mvs[i][1];
