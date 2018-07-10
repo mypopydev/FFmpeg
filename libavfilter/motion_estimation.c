@@ -54,6 +54,8 @@ void ff_me_init_context(AVMotionEstContext *me_ctx, int mb_size, int search_para
     me_ctx->x_max = x_max;
     me_ctx->y_min = y_min;
     me_ctx->y_max = y_max;
+
+    me_ctx->sad = av_pixelutils_get_sad_fn(av_ceil_log2_c(mb_size), av_ceil_log2_c(mb_size), 0, NULL);
 }
 
 uint64_t ff_me_cmp_sad(AVMotionEstContext *me_ctx, int x_mb, int y_mb, int x_mv, int y_mv)
@@ -67,9 +69,13 @@ uint64_t ff_me_cmp_sad(AVMotionEstContext *me_ctx, int x_mb, int y_mb, int x_mv,
     data_ref += y_mv * linesize;
     data_cur += y_mb * linesize;
 
-    for (j = 0; j < me_ctx->mb_size; j++)
-        for (i = 0; i < me_ctx->mb_size; i++)
-            sad += FFABS(data_ref[x_mv + i + j * linesize] - data_cur[x_mb + i + j * linesize]);
+    if (me_ctx->sad) {
+        sad = me_ctx->sad(data_ref+x_mv, linesize, data_cur+x_mb, linesize);
+    } else {
+        for (j = 0; j < me_ctx->mb_size; j++)
+            for (i = 0; i < me_ctx->mb_size; i++)
+                sad += FFABS(data_ref[x_mv + i + j * linesize] - data_cur[x_mb + i + j * linesize]);
+    }
 
     return sad;
 }
