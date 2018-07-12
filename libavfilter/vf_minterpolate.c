@@ -197,6 +197,8 @@ typedef struct MIContext {
     int nb_planes;
 } MIContext;
 
+av_pixelutils_sad_fn sbad_cost = NULL;
+
 #define OFFSET(x) offsetof(MIContext, x)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 #define CONST(name, help, val, unit) { name, help, 0, AV_OPT_TYPE_CONST, {.i64=val}, 0, 0, FLAGS, unit }
@@ -273,9 +275,14 @@ static uint64_t get_sbad(AVMotionEstContext *me_ctx, int x, int y, int x_mv, int
     data_cur += (y + mv_y) * linesize;
     data_next += (y - mv_y) * linesize;
 
+    #if 0
     for (j = 0; j < me_ctx->mb_size; j++)
         for (i = 0; i < me_ctx->mb_size; i++)
             sbad += FFABS(data_cur[x + mv_x + i + j * linesize] - data_next[x - mv_x + i + j * linesize]);
+    #endif
+    #if 1
+    sbad = sbad_cost(&data_cur[x + mv_x], linesize, &data_next[x - mv_x], linesize);
+    #endif
 
     return sbad + (FFABS(mv_x1 - me_ctx->pred_x) + FFABS(mv_y1 - me_ctx->pred_y)) * COST_PRED_SCALE;
 }
@@ -299,9 +306,13 @@ static uint64_t get_sbad_ob(AVMotionEstContext *me_ctx, int x, int y, int x_mv, 
     mv_x = av_clip(x_mv - x, -FFMIN(x - x_min, x_max - x), FFMIN(x - x_min, x_max - x));
     mv_y = av_clip(y_mv - y, -FFMIN(y - y_min, y_max - y), FFMIN(y - y_min, y_max - y));
 
+    #if 0
     for (j = -me_ctx->mb_size / 2; j < me_ctx->mb_size * 3 / 2; j++)
         for (i = -me_ctx->mb_size / 2; i < me_ctx->mb_size * 3 / 2; i++)
             sbad += FFABS(data_cur[x + mv_x + i + (y + mv_y + j) * linesize] - data_next[x - mv_x + i + (y - mv_y + j) * linesize]);
+    #endif
+    sbad = me_ctx->sad(&data_cur[x + mv_x - me_ctx->mb_size / 2 + (y + mv_y - me_ctx->mb_size / 2) * linesize], linesize,
+                       &data_next[x - mv_x - me_ctx->mb_size / 2 + (y - mv_y - me_ctx->mb_size / 2) * linesize], linesize);
 
     return sbad + (FFABS(mv_x1 - me_ctx->pred_x) + FFABS(mv_y1 - me_ctx->pred_y)) * COST_PRED_SCALE;
 }
@@ -325,9 +336,13 @@ static uint64_t get_sad_ob(AVMotionEstContext *me_ctx, int x, int y, int x_mv, i
     x_mv = av_clip(x_mv, x_min, x_max);
     y_mv = av_clip(y_mv, y_min, y_max);
 
+    #if 0
     for (j = -me_ctx->mb_size / 2; j < me_ctx->mb_size * 3 / 2; j++)
         for (i = -me_ctx->mb_size / 2; i < me_ctx->mb_size * 3 / 2; i++)
             sad += FFABS(data_ref[x_mv + i + (y_mv + j) * linesize] - data_cur[x + i + (y + j) * linesize]);
+    #endif
+    sad = me_ctx->sad(&data_ref[x + mv_x - me_ctx->mb_size / 2 + (y + mv_y - me_ctx->mb_size / 2) * linesize], linesize,
+                      &data_cur[x - mv_x - me_ctx->mb_size / 2 + (y - mv_y - me_ctx->mb_size / 2) * linesize], linesize);
 
     return sad + (FFABS(mv_x - me_ctx->pred_x) + FFABS(mv_y - me_ctx->pred_y)) * COST_PRED_SCALE;
 }
@@ -390,10 +405,19 @@ static int config_input(AVFilterLink *inlink)
 
     ff_me_init_context(me_ctx, mi_ctx->mb_size, mi_ctx->search_param, width, height, 0, (mi_ctx->b_width - 1) << mi_ctx->log2_mb_size, 0, (mi_ctx->b_height - 1) << mi_ctx->log2_mb_size);
 
-    if (mi_ctx->me_mode == ME_MODE_BIDIR)
+    if (mi_ctx->me_mode == ME_MODE_BIDIR) {
         me_ctx->get_cost = &get_sad_ob;
-    else if (mi_ctx->me_mode == ME_MODE_BILAT)
+        me_ctx->sad = av_pixelutils_get_sad_fn(av_ceil_log2_c(mi_ctx->mb_size)+1, av_ceil_log2_c(mi_ctx->mb_size)+1, 0, NULL);
+    } else if (mi_ctx->me_mode == ME_MODE_BILAT) {
         me_ctx->get_cost = &get_sbad_ob;
+        me_ctx->sad = av_pixelutils_get_sad_fn(av_ceil_log2_c(mi_ctx->mb_size)+1, av_ceil_log2_c(mi_ctx->mb_size)+1, 0, NULL);
+    }
+    if (!me_ctx->sad)
+        return AVERROR(EINVAL);
+
+    sbad_cost = av_pixelutils_get_sad_fn(av_ceil_log2_c(mi_ctx->mb_size), av_ceil_log2_c(mi_ctx->mb_size), 0, NULL);
+    if (!sbad_cost)
+        return AVERROR(EINVAL);
 
     return 0;
 fail:
