@@ -615,9 +615,11 @@ static int vaapi_encode_h265_init_sequence_params(AVCodecContext *avctx)
 static int vaapi_encode_h265_init_picture_params(AVCodecContext *avctx,
                                                  VAAPIEncodePicture *pic)
 {
+    VAAPIEncodeContext               *ctx = avctx->priv_data;
     VAAPIEncodeH265Context          *priv = avctx->priv_data;
     VAEncPictureParameterBufferHEVC *vpic = pic->codec_picture_params;
     int i;
+    int slices;
 
     if (pic->type == PICTURE_TYPE_IDR) {
         av_assert0(pic->display_order == pic->encode_order);
@@ -792,7 +794,17 @@ static int vaapi_encode_h265_init_picture_params(AVCodecContext *avctx,
         av_assert0(0 && "invalid picture type");
     }
 
-    pic->nb_slices = 1;
+    slices = 1;
+    if (ctx->max_slices) {
+        if (avctx->slices <= FFMIN(ctx->max_slices, priv->ctu_height)) {
+            slices = FFMAX(avctx->slices, slices);
+        } else {
+            av_log(avctx, AV_LOG_ERROR, "The max slices number per frame "
+                   "cannot more than %d.\n", FFMIN(ctx->max_slices, priv->ctu_height));
+            return AVERROR(EINVAL);
+        }
+    }
+    pic->nb_slices = slices;
 
     return 0;
 }
@@ -809,6 +821,7 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
     VAEncPictureParameterBufferHEVC  *vpic = pic->codec_picture_params;
     VAEncSliceParameterBufferHEVC  *vslice = slice->codec_slice_params;
     int i;
+    int base, mod;
 
     sh->nal_unit_header = (H265RawNALUnitHeader) {
         .nal_unit_type         = priv->slice_nal_unit,
@@ -818,9 +831,14 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
 
     sh->slice_pic_parameter_set_id      = pps->pps_pic_parameter_set_id;
 
-    // Currently we only support one slice per frame.
-    sh->first_slice_segment_in_pic_flag = 1;
-    sh->slice_segment_address           = 0;
+    base = priv->ctu_height / pic->nb_slices;
+    mod  = priv->ctu_height % pic->nb_slices;
+    sh->first_slice_segment_in_pic_flag = !!(slice->index == 0);
+    if (slice->index < mod)
+        sh->slice_segment_address = slice->index * priv->ctu_width * (base + 1);
+    else
+        sh->slice_segment_address = mod * priv->ctu_width * (base + 1) +
+                                    (slice->index - mod) * priv->ctu_width * base;
 
     sh->slice_type = priv->slice_type;
 
@@ -910,7 +928,6 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
 
     *vslice = (VAEncSliceParameterBufferHEVC) {
         .slice_segment_address = sh->slice_segment_address,
-        .num_ctu_in_slice      = priv->ctu_width * priv->ctu_height,
 
         .slice_type                 = sh->slice_type,
         .slice_pic_parameter_set_id = sh->slice_pic_parameter_set_id,
@@ -931,7 +948,6 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
         .slice_tc_offset_div2   = sh->slice_tc_offset_div2,
 
         .slice_fields.bits = {
-            .last_slice_of_pic_flag       = 1,
             .dependent_slice_segment_flag = sh->dependent_slice_segment_flag,
             .colour_plane_id              = sh->colour_plane_id,
             .slice_temporal_mvp_enabled_flag =
@@ -949,6 +965,13 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
             .collocated_from_l0_flag      = sh->collocated_from_l0_flag,
         },
     };
+
+    if (slice->index < mod)
+        vslice->num_ctu_in_slice = priv->ctu_width * (base + 1);
+    else
+        vslice->num_ctu_in_slice = priv->ctu_width * base;
+    if (slice->index == pic->nb_slices - 1)
+        vslice->slice_fields.bits.last_slice_of_pic_flag = 1;
 
     for (i = 0; i < FF_ARRAY_ELEMS(vslice->ref_pic_list0); i++) {
         vslice->ref_pic_list0[i].picture_id = VA_INVALID_ID;
@@ -1020,6 +1043,12 @@ static av_cold int vaapi_encode_h265_configure(AVCodecContext *avctx)
 
     } else {
         av_assert0(0 && "Invalid RC mode.");
+    }
+
+    if (!ctx->max_slices && avctx->slices > 0) {
+        av_log(avctx, AV_LOG_ERROR, "The encode slice option is not "
+               "supported with the driver.\n");
+        return AVERROR(ENOSYS);
     }
 
     return 0;
