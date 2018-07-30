@@ -826,7 +826,7 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
     sh->slice_pic_parameter_set_id      = pps->pps_pic_parameter_set_id;
 
     sh->first_slice_segment_in_pic_flag = !!(slice->index == 0);
-    sh->slice_segment_address           = slice->index * priv->ctu_width * (FFALIGN(priv->ctu_height, pic->nb_slices) / pic->nb_slices);;
+    sh->slice_segment_address           = slice->index * priv->ctu_width * (priv->ctu_height / pic->nb_slices);
 
     sh->slice_type = priv->slice_type;
 
@@ -955,10 +955,10 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
     };
     if (slice->index == pic->nb_slices - 1) {
         vslice->num_ctu_in_slice =  priv->ctu_width *  priv->ctu_height
-                                   - slice->index * priv->ctu_width * (FFALIGN(priv->ctu_height, pic->nb_slices) / pic->nb_slices);
+                                   - slice->index * priv->ctu_width * (priv->ctu_height / pic->nb_slices);
         vslice->slice_fields.bits.last_slice_of_pic_flag = 1;
     } else
-        vslice->num_ctu_in_slice = priv->ctu_width * (FFALIGN(priv->ctu_height, pic->nb_slices) / pic->nb_slices);
+        vslice->num_ctu_in_slice = priv->ctu_width * (priv->ctu_height / pic->nb_slices);
 
     for (i = 0; i < FF_ARRAY_ELEMS(vslice->ref_pic_list0); i++) {
         vslice->ref_pic_list0[i].picture_id = VA_INVALID_ID;
