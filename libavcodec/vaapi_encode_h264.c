@@ -748,13 +748,13 @@ static int vaapi_encode_h264_init_slice_params(AVCodecContext *avctx,
         sh->slice_qp_delta = priv->fixed_qp_idr - (pps->pic_init_qp_minus26 + 26);
 
 
-    vslice->macroblock_address = slice->index * priv->mb_width * (FFALIGN(priv->mb_height, pic->nb_slices) / pic->nb_slices);;
+    vslice->macroblock_address = slice->index * priv->mb_width * (priv->mb_height / pic->nb_slices);
     if (slice->index == pic->nb_slices - 1) {
         vslice->num_macroblocks =  priv->mb_width *  priv->mb_height
-                                   - slice->index * priv->mb_width * (FFALIGN(priv->mb_height, pic->nb_slices) / pic->nb_slices);
+                                   - slice->index * priv->mb_width * (priv->mb_height / pic->nb_slices);
         priv->idr_pic_count++;
     } else
-        vslice->num_macroblocks = priv->mb_width * (FFALIGN(priv->mb_height, pic->nb_slices) / pic->nb_slices);
+        vslice->num_macroblocks = priv->mb_width * (priv->mb_height / pic->nb_slices);
 
     vslice->macroblock_info = VA_INVALID_ID;
 
