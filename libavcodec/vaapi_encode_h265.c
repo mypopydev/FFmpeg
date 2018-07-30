@@ -44,8 +44,6 @@ typedef struct VAAPIEncodeH265Context {
     unsigned int ctu_width;
     unsigned int ctu_height;
 
-    int last_ctu_index;
-
     int fixed_qp_idr;
     int fixed_qp_p;
     int fixed_qp_b;
@@ -793,17 +791,15 @@ static int vaapi_encode_h265_init_picture_params(AVCodecContext *avctx,
 
     slices = 1;
     if (ctx->max_slices) {
-        if (avctx->slices <= ctx->max_slices) {
+        if (avctx->slices <= FFMIN(ctx->max_slices, priv->ctu_height)) {
             slices = FFMAX(avctx->slices, slices);
         } else {
             av_log(avctx, AV_LOG_ERROR, "The max slices number per frame "
-                   "cannot more than %d.\n", ctx->max_slices);
+                   "cannot more than %d.\n", FFMIN(ctx->max_slices, priv->ctu_height));
             return AVERROR_INVALIDDATA;
         }
     }
     pic->nb_slices = slices;
-
-    priv->last_ctu_index = 0;
 
     return 0;
 }
@@ -829,8 +825,8 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
 
     sh->slice_pic_parameter_set_id      = pps->pps_pic_parameter_set_id;
 
-    sh->first_slice_segment_in_pic_flag = !!(priv->last_ctu_index == 0);
-    sh->slice_segment_address           = priv->last_ctu_index;
+    sh->first_slice_segment_in_pic_flag = !!(slice->index == 0);
+    sh->slice_segment_address           = slice->index * priv->ctu_width * (FFALIGN(priv->ctu_height, pic->nb_slices) / pic->nb_slices);;
 
     sh->slice_type = priv->slice_type;
 
@@ -920,8 +916,6 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
 
     *vslice = (VAEncSliceParameterBufferHEVC) {
         .slice_segment_address = sh->slice_segment_address,
-        .num_ctu_in_slice      =
-        ((slice->index + 1) * priv->ctu_width * priv->ctu_height) / pic->nb_slices - priv->last_ctu_index,
 
         .slice_type                 = sh->slice_type,
         .slice_pic_parameter_set_id = sh->slice_pic_parameter_set_id,
@@ -959,10 +953,12 @@ static int vaapi_encode_h265_init_slice_params(AVCodecContext *avctx,
             .collocated_from_l0_flag      = sh->collocated_from_l0_flag,
         },
     };
-    if (priv->last_ctu_index == priv->ctu_width * priv->ctu_height)
+    if (slice->index == pic->nb_slices - 1) {
+        vslice->num_ctu_in_slice =  priv->ctu_width *  priv->ctu_height
+                                   - slice->index * priv->ctu_width * (FFALIGN(priv->ctu_height, pic->nb_slices) / pic->nb_slices);
         vslice->slice_fields.bits.last_slice_of_pic_flag = 1;
-    priv->last_ctu_index += vslice->num_ctu_in_slice;
-
+    } else
+        vslice->num_ctu_in_slice = priv->ctu_width * (FFALIGN(priv->ctu_height, pic->nb_slices) / pic->nb_slices);
 
     for (i = 0; i < FF_ARRAY_ELEMS(vslice->ref_pic_list0); i++) {
         vslice->ref_pic_list0[i].picture_id = VA_INVALID_ID;
