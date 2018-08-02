@@ -2546,6 +2546,15 @@ static int decode_chunks(AVCodecContext *avctx, AVFrame *picture,
                     s2->er.error_count += s2->thread_context[i]->er.error_count;
                 s->slice_count = 0;
             }
+
+            if (s2->first_field) {
+                /* slice ends for the first field */
+                ret = slice_end(avctx, picture);
+                av_assert1(ret == 0);
+                if (ret < 0)
+                    return ret;
+            }
+
             if (last_code == 0 || last_code == SLICE_MIN_START_CODE) {
                 ret = mpeg_decode_postinit(avctx);
                 if (ret < 0) {

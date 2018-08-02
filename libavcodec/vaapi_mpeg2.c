@@ -156,7 +156,7 @@ static int vaapi_mpeg2_decode_slice(AVCodecContext *avctx, const uint8_t *buffer
         .slice_data_flag            = VA_SLICE_DATA_FLAG_ALL,
         .macroblock_offset          = macroblock_offset,
         .slice_horizontal_position  = s->mb_x,
-        .slice_vertical_position    = s->mb_y >> (s->picture_structure != PICT_FRAME),
+        .slice_vertical_position    = s->mb_y,
         .quantiser_scale_code       = quantiser_scale_code,
         .intra_slice_flag           = intra_slice_flag,
     };
