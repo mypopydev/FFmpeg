@@ -366,6 +366,8 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
                      CONFIG_HEVC_VIDEOTOOLBOX_HWACCEL + \
                      CONFIG_HEVC_VDPAU_HWACCEL)
     enum AVPixelFormat pix_fmts[HWACCEL_MAX + 2], *fmt = pix_fmts;
+    const enum AVPixelFormat *choices = pix_fmts;
+    int i;
 
     switch (sps->pix_fmt) {
     case AV_PIX_FMT_YUV420P:
@@ -418,6 +420,9 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
     *fmt++ = sps->pix_fmt;
     *fmt = AV_PIX_FMT_NONE;
 
+    for (i=0; choices[i] != AV_PIX_FMT_NONE; i++)
+        if (choices[i] == s->avctx->pix_fmt)
+            return choices[i];
     return ff_thread_get_format(s->avctx, pix_fmts);
 }
 
