@@ -737,8 +737,11 @@ static int apply_cropping(AVCodecContext *avctx, AVFrame *frame)
     if (!avctx->apply_cropping)
         return 0;
 
-    return av_frame_apply_cropping(frame, avctx->flags & AV_CODEC_FLAG_UNALIGNED ?
-                                          AV_FRAME_CROP_UNALIGNED : 0);
+    if (avctx->hwaccel) {
+		return 0;
+	} else {
+		return av_frame_apply_cropping(frame, avctx->flags & AV_CODEC_FLAG_UNALIGNED ? AV_FRAME_CROP_UNALIGNED : 0);
+	}
 }
 
 int attribute_align_arg avcodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
