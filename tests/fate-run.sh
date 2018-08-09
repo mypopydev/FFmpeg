@@ -26,6 +26,7 @@ gen=${16:-no}
 hwaccel=${17:-none}
 report_type=${18:-standard}
 keep=${19:-0}
+output_pixfmt=${20:-yuv420p}
 
 outdir="tests/data/fate"
 outfile="${outdir}/${test}"
@@ -132,7 +133,28 @@ ffmpeg(){
 }
 
 framecrc(){
-    ffmpeg "$@" -bitexact -f framecrc -
+	match_hwaccel="vaapi"
+	match_result=$(echo "$hwaccel" | grep ${match_hwaccel})
+    if [ "$match_result" != "" ]
+    then
+    	match_str="format"
+	    result=$(echo "$@" | grep ${match_str})
+	    if [ "$result" != "" ]
+	    then
+	        ffmpeg "$@" -flags +bitexact -fflags +bitexact -f framecrc -
+	    else
+	        match_str="pix_fmt"
+	        result=$(echo "$@" | grep ${match_str})
+	        if [ "$result" != "" ]
+	        then
+	            ffmpeg "$@" -flags +bitexact -fflags +bitexact -f framecrc -
+	        else
+	            ffmpeg "$@" -pix_fmt $output_pixfmt -flags +bitexact -fflags +bitexact -f framecrc -
+	        fi
+	    fi
+    else
+        ffmpeg "$@" -bitexact -f framecrc -
+    fi
 }
 
 ffmetadata(){
@@ -140,7 +162,28 @@ ffmetadata(){
 }
 
 framemd5(){
-    ffmpeg "$@" -bitexact -f framemd5 -
+	match_hwaccel="vaapi"
+	match_result=$(echo "$hwaccel" | grep ${match_hwaccel})
+    if [ "$match_result" != "" ]
+    then
+    	match_str="format"
+	    result=$(echo "$@" | grep ${match_str})
+	    if [ "$result" != "" ]
+	    then
+	        ffmpeg "$@" -flags +bitexact -fflags +bitexact -f framemd5 -
+	    else
+	        match_str="pix_fmt"
+	        result=$(echo "$@" | grep ${match_str})
+	        if [ "$result" != "" ]
+	        then
+	            ffmpeg "$@" -flags +bitexact -fflags +bitexact -f framemd5 -
+	        else
+	            ffmpeg "$@" -pix_fmt $output_pixfmt -flags +bitexact -fflags +bitexact -f framemd5 -
+	        fi
+	    fi
+    else
+        ffmpeg "$@" -bitexact -f framemd5 -
+    fi
 }
 
 crc(){
