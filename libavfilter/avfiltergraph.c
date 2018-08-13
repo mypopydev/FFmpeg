@@ -1453,3 +1453,8 @@ int ff_filter_graph_run_once(AVFilterGraph *graph)
         return AVERROR(EAGAIN);
     return ff_filter_activate(filter);
 }
+
+const AVClass *avfilter_graph_get_class(void)
+{
+    return &filtergraph_class;
+}
