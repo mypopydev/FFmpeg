@@ -1162,6 +1162,13 @@ char *avfilter_graph_dump(AVFilterGraph *graph, const char *options);
 int avfilter_graph_request_oldest(AVFilterGraph *graph);
 
 /**
+ * @return AVClass for AVFilterGraph.
+ *
+ * @see av_opt_find().
+ */
+const AVClass *avfilter_graph_get_class(void);
+
+/**
  * @}
  */
 
