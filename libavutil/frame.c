@@ -889,18 +889,6 @@ int av_frame_apply_cropping(AVFrame *frame, int flags)
     if (!desc)
         return AVERROR_BUG;
 
-    /* Apply just the right/bottom cropping for hwaccel formats. Bitstream
-     * formats cannot be easily handled here either (and corresponding decoders
-     * should not export any cropping anyway), so do the same for those as well.
-     * */
-    if (desc->flags & (AV_PIX_FMT_FLAG_BITSTREAM | AV_PIX_FMT_FLAG_HWACCEL)) {
-        frame->width      -= frame->crop_right;
-        frame->height     -= frame->crop_bottom;
-        frame->crop_right  = 0;
-        frame->crop_bottom = 0;
-        return 0;
-    }
-
     /* calculate the offsets for each plane */
     calc_cropping_offsets(offsets, frame, desc);
 

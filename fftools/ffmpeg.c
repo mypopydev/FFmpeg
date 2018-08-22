@@ -2428,6 +2428,7 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output, int64_
         err = ist->hwaccel_retrieve_data(ist->dec_ctx, decoded_frame);
         if (err < 0)
             goto fail;
+        av_frame_apply_cropping(decoded_frame, ist->dec_ctx->flags & AV_CODEC_FLAG_UNALIGNED ? AV_FRAME_CROP_UNALIGNED : 0);
     }
     ist->hwaccel_retrieved_pix_fmt = decoded_frame->format;
 
