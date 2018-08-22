@@ -903,6 +903,9 @@ static const VAAPIEncodeProfile vaapi_encode_h264_profiles[] = {
 static const VAAPIEncodeType vaapi_encode_type_h264 = {
     .profiles              = vaapi_encode_h264_profiles,
 
+    .flags                 = FLAG_B_PICTURES |
+                             FLAG_NON_IDR_KEY_PICTURES,
+
     .configure             = &vaapi_encode_h264_configure,
 
     .sequence_params_size  = sizeof(VAEncSequenceParameterBufferH264),
@@ -1092,7 +1095,8 @@ AVCodec ff_h264_vaapi_encoder = {
     .id             = AV_CODEC_ID_H264,
     .priv_data_size = sizeof(VAAPIEncodeH264Context),
     .init           = &vaapi_encode_h264_init,
-    .encode2        = &ff_vaapi_encode2,
+    .send_frame     = &ff_vaapi_encode_send_frame,
+    .receive_packet = &ff_vaapi_encode_receive_packet,
     .close          = &vaapi_encode_h264_close,
     .priv_class     = &vaapi_encode_h264_class,
     .capabilities   = AV_CODEC_CAP_DELAY | AV_CODEC_CAP_HARDWARE,
