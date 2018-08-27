@@ -551,7 +551,7 @@ static av_cold int vaapi_encode_mpeg2_configure(AVCodecContext *avctx)
         priv->quant_i = 15;
         priv->quant_p = 15;
         priv->quant_b = 15;
-        =av_log(avctx, AV_LOG_DEBUG, "Using %s-bitrate = %"PRId64" bps.\n",
+        av_log(avctx, AV_LOG_DEBUG, "Using %s-bitrate = %"PRId64" bps.\n",
                ctx->va_rc_mode == VA_RC_CBR ? "constant" : "variable",
                avctx->bit_rate);
     } else {
