@@ -547,14 +547,13 @@ static av_cold int vaapi_encode_mpeg2_configure(AVCodecContext *avctx)
                priv->quant_i, priv->quant_p, priv->quant_b);
 
     }  else if (ctx->va_rc_mode == VA_RC_CBR ||
-            ctx->va_rc_mode == VA_RC_VBR) {
-    	priv->quant_i = 15;
-    	priv->quant_p   = 15;
-    	priv->quant_b   = 15;
-    	av_log(avctx, AV_LOG_DEBUG, "Using %s-bitrate = %"PRId64" bps.\n",
-    			ctx->va_rc_mode == VA_RC_CBR ? "constant" : "variable",
-    		    avctx->bit_rate);
-
+                ctx->va_rc_mode == VA_RC_VBR) {
+        priv->quant_i = 15;
+        priv->quant_p = 15;
+        priv->quant_b = 15;
+        =av_log(avctx, AV_LOG_DEBUG, "Using %s-bitrate = %"PRId64" bps.\n",
+               ctx->va_rc_mode == VA_RC_CBR ? "constant" : "variable",
+               avctx->bit_rate);
     } else {
         av_assert0(0 && "Invalid RC mode.");
     }
@@ -636,10 +635,10 @@ static av_cold int vaapi_encode_mpeg2_init(AVCodecContext *avctx)
     ctx->va_rt_format  = VA_RT_FORMAT_YUV420;
 
     if (avctx->bit_rate > 0) {
-    	if (avctx->rc_max_rate == avctx->bit_rate)
-    		ctx->va_rc_mode = VA_RC_CBR;
-    	else
-    		ctx->va_rc_mode = VA_RC_VBR;
+        if (avctx->rc_max_rate == avctx->bit_rate)
+            ctx->va_rc_mode = VA_RC_CBR;
+        else
+            ctx->va_rc_mode = VA_RC_VBR;
     } else
         ctx->va_rc_mode = VA_RC_CQP;
 
