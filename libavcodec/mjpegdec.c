@@ -75,6 +75,25 @@ static int build_vlc(VLC *vlc, const uint8_t *bits_table,
 static int build_basic_mjpeg_vlc(MJpegDecodeContext *s)
 {
     int ret;
+    int i;
+
+    /* initialize default huffman tables */
+    for (i = 0; i < 16; i++)
+        s->raw_huffman_lengths[0][0][i] = avpriv_mjpeg_bits_dc_luminance[i + 1];
+    for (i = 0; i < 12; i++)
+        s->raw_huffman_values[0][0][i] = avpriv_mjpeg_val_dc[i];
+    for (i = 0; i < 16; i++)
+        s->raw_huffman_lengths[0][1][i] = avpriv_mjpeg_bits_dc_chrominance[i + 1];
+    for (i = 0; i < 12; i++)
+        s->raw_huffman_values[0][1][i] = avpriv_mjpeg_val_dc[i];
+    for (i = 0; i < 16; i++)
+        s->raw_huffman_lengths[1][0][i] = avpriv_mjpeg_bits_ac_luminance[i + 1];
+    for (i = 0; i < 162; i++)
+        s->raw_huffman_values[1][0][i] = avpriv_mjpeg_val_ac_luminance[i];
+    for (i = 0; i < 16; i++)
+        s->raw_huffman_lengths[1][1][i] = avpriv_mjpeg_bits_ac_chrominance[i + 1];
+    for (i = 0; i < 162; i++)
+        s->raw_huffman_values[1][1][i] = avpriv_mjpeg_val_ac_chrominance[i];
 
     if ((ret = build_vlc(&s->vlcs[0][0], avpriv_mjpeg_bits_dc_luminance,
                          avpriv_mjpeg_val_dc, 12, 0, 0)) < 0)
