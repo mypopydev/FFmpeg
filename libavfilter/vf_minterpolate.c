@@ -1307,20 +1307,26 @@ static void ff_global_blend_row_avx2(const uint8_t *src0,
       "mov        $0x807f807f,%%eax              \n"
       "vmovd      %%eax,%%xmm7                   \n"
       "vbroadcastss %%xmm7,%%ymm7                \n"
-      "sub        %2,%0                          \n"
-      "sub        %2,%1                          \n"
-      "sub        %2,%3                          \n"
+      // a => ymm8 [a a a a a a a a a a a a a a a a
+      //            a a a a a a a a a a a a a a a a
+      //            a a a a a a a a a a a a a a a a
+      //            a a a a a a a a a a a a a a a a]
+      "movb       (%2),%%al                      \n"
+      "movd       %%eax,%%xmm8                   \n" // xmm8 = x x x x x x x x x x x x x x x a
+      "punpcklbw  %%xmm8,%%xmm8                  \n" // xmm8 = x x x x x x x x x x x x x x a a
+      "punpcklbw  %%xmm8,%%xmm8                  \n" // xmm8 = x x x x x x x x x x x x a a a a
+      "vbroadcastss %%xmm8,%%ymm8                \n"
 
       // 32 pixel per loop.
       "1:                                        \n"
-      "vmovdqu    (%2),%%ymm0                    \n"
+      "vmovdqu    %%ymm8,%%ymm0                  \n"
       "vpunpckhbw %%ymm0,%%ymm0,%%ymm3           \n"
       "vpunpcklbw %%ymm0,%%ymm0,%%ymm0           \n"
       "vpxor      %%ymm5,%%ymm3,%%ymm3           \n"
       "vpxor      %%ymm5,%%ymm0,%%ymm0           \n"
 
-      "vmovdqu    (%0,%2,1),%%ymm1               \n"
-      "vmovdqu    (%1,%2,1),%%ymm2               \n"
+      "vmovdqu    (%0),%%ymm1                    \n"
+      "vmovdqu    (%1),%%ymm2                    \n"
       "vpunpckhbw %%ymm2,%%ymm1,%%ymm4           \n"
       "vpunpcklbw %%ymm2,%%ymm1,%%ymm1           \n"
       "vpsubb     %%ymm6,%%ymm4,%%ymm4           \n"
@@ -1333,8 +1339,10 @@ static void ff_global_blend_row_avx2(const uint8_t *src0,
       "vpsrlw     $0x8,%%ymm0,%%ymm0             \n"
       "vpackuswb  %%ymm3,%%ymm0,%%ymm0           \n"
 
-      "vmovdqu    %%ymm0,(%3,%2,1)               \n"
-      "lea        0x20(%2),%2                    \n"
+      "vmovdqu    %%ymm0,(%3)                    \n"
+      "lea        0x20(%0),%0                    \n"
+      "lea        0x20(%1),%1                    \n"
+      "lea        0x20(%3),%3                    \n"
       "sub        $0x20,%4                       \n"
       "jg        1b                              \n"
       "vzeroupper                                \n"
@@ -1345,7 +1353,7 @@ static void ff_global_blend_row_avx2(const uint8_t *src0,
         "+rm"(width)  // %4
         ::"memory",
         "cc", "eax", "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6",
-         "xmm7");
+         "xmm7", "xmm8");
 }
 
 static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
