@@ -1465,6 +1465,7 @@ static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
                     uint8_t af1;
 
                     af1 = (uint8_t)(alpha*255/1024);
+#if 0
                     for (y = 0; y < height; y++) {
                         pA = (uint8_t *)&mi_ctx->frames[2].avf->data[plane][y * mi_ctx->frames[2].avf->linesize[plane]];
                         pB = (uint8_t *)&mi_ctx->frames[1].avf->data[plane][y * mi_ctx->frames[1].avf->linesize[plane]];
@@ -1478,6 +1479,25 @@ static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
                         */
 
                         for (x = (width/8 * 8); x < width; x++) {
+                            avf_out->data[plane][x + y * avf_out->linesize[plane]] =
+                                (alpha  * mi_ctx->frames[2].avf->data[plane][x + y * mi_ctx->frames[2].avf->linesize[plane]] +
+                                 (ALPHA_MAX - alpha) * mi_ctx->frames[1].avf->data[plane][x + y * mi_ctx->frames[1].avf->linesize[plane]] + 512) >> 10;
+                        }
+                    }
+#endif
+                    for (y = 0; y < height; y++) {
+                        pA = (uint8_t *)&mi_ctx->frames[2].avf->data[plane][y * mi_ctx->frames[2].avf->linesize[plane]];
+                        pB = (uint8_t *)&mi_ctx->frames[1].avf->data[plane][y * mi_ctx->frames[1].avf->linesize[plane]];
+                        pD = (uint8_t *)&avf_out->data[plane][y * avf_out->linesize[plane]];
+                        ff_global_blend_row_avx2(pA, pB, &af1, pD, width/32 * 32);
+                        /*
+                        printf("pA : %0x %0x %0x %0x %0x %0x %0x %0x. width %d heigth %d alpha %d\n", pA[0], pA[1], pA[2], pA[3], pA[4], pA[5], pA[6], pA[7], width/8 * 8, height, af1);
+                        printf("pB : %0x %0x %0x %0x %0x %0x %0x %0x.\n", pB[0], pB[1], pB[2], pB[3], pB[4], pB[5], pB[6], pB[7]);
+                        printf("Alpha : %0x\n", af1);
+                        printf("pD : %0x %0x %0x %0x %0x %0x %0x %0x.\n", pD[0], pD[1], pD[2], pD[3], pD[4], pD[5], pD[6], pD[7]);
+                        */
+
+                        for (x = (width/32 * 32); x < width; x++) {
                             avf_out->data[plane][x + y * avf_out->linesize[plane]] =
                                 (alpha  * mi_ctx->frames[2].avf->data[plane][x + y * mi_ctx->frames[2].avf->linesize[plane]] +
                                  (ALPHA_MAX - alpha) * mi_ctx->frames[1].avf->data[plane][x + y * mi_ctx->frames[1].avf->linesize[plane]] + 512) >> 10;
