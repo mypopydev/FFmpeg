@@ -1406,6 +1406,7 @@ static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
                     }
                 }
                 #else
+                #if 0
                 {
                     __m128i *pA, *pB, *pD;
                     __m128i A, B, D1, D2, alfa, beta, gamma, zero;
@@ -1458,7 +1459,34 @@ static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
                     }
                 }
                 #endif
+
+                 {
+                    uint8_t *pA, *pB, *pD;
+                    uint8_t af1;
+
+                    af1 = (uint8_t)(alpha*255/1024);
+                    for (y = 0; y < height; y++) {
+                        pA = (uint8_t *)&mi_ctx->frames[2].avf->data[plane][y * mi_ctx->frames[2].avf->linesize[plane]];
+                        pB = (uint8_t *)&mi_ctx->frames[1].avf->data[plane][y * mi_ctx->frames[1].avf->linesize[plane]];
+                        pD = (uint8_t *)&avf_out->data[plane][y * avf_out->linesize[plane]];
+                        ff_global_blend_row_ssse3(pA, pB, &af1, pD, width/8 * 8);
+                        /*
+                        printf("pA : %0x %0x %0x %0x %0x %0x %0x %0x. width %d heigth %d alpha %d\n", pA[0], pA[1], pA[2], pA[3], pA[4], pA[5], pA[6], pA[7], width/8 * 8, height, af1);
+                        printf("pB : %0x %0x %0x %0x %0x %0x %0x %0x.\n", pB[0], pB[1], pB[2], pB[3], pB[4], pB[5], pB[6], pB[7]);
+                        printf("Alpha : %0x\n", af1);
+                        printf("pD : %0x %0x %0x %0x %0x %0x %0x %0x.\n", pD[0], pD[1], pD[2], pD[3], pD[4], pD[5], pD[6], pD[7]);
+                        */
+
+                        for (x = (width/8 * 8); x < width; x++) {
+                            avf_out->data[plane][x + y * avf_out->linesize[plane]] =
+                                (alpha  * mi_ctx->frames[2].avf->data[plane][x + y * mi_ctx->frames[2].avf->linesize[plane]] +
+                                 (ALPHA_MAX - alpha) * mi_ctx->frames[1].avf->data[plane][x + y * mi_ctx->frames[1].avf->linesize[plane]] + 512) >> 10;
+                        }
+                    }
+                }
+                #endif
                 // SSE3
+#if 0
                 {
                     uint8_t src0[] = {0x01, 0x23, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE};
                     uint8_t src1[] = {0xF0, 0xDE, 0xBC, 0x9A, 0x78, 0x56, 0x34, 0x23};
@@ -1492,6 +1520,7 @@ static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
                     printf("%0x %0x %0x %0x %0x %0x %0x %0x.\n", dst[16], dst[17], dst[18], dst[19], dst[20], dst[21], dst[22], dst[23]);
                     printf("%0x %0x %0x %0x %0x %0x %0x %0x.\n", dst[24], dst[25], dst[26], dst[27], dst[28], dst[29], dst[30], dst[31]);
                 }
+#endif
             }
 
             break;
