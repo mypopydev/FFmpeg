@@ -32,6 +32,8 @@
 #include "internal.h"
 #include "video.h"
 
+#include <immintrin.h>
+
 #define ME_MODE_BIDIR 0
 #define ME_MODE_BILAT 1
 
@@ -195,6 +197,13 @@ typedef struct MIContext {
     int log2_chroma_w;
     int log2_chroma_h;
     int nb_planes;
+
+    /*
+     * global alpha blending with row
+     * dst = ((alpha * src0 ) + (src2 * (255-alpha)) + 255) / 256
+     */
+    void (*blend_row)(const uint8_t *src0, const uint8_t *src1,
+                      const uint8_t *alpha, uint8_t *dst, int width);
 } MIContext;
 
 #define OFFSET(x) offsetof(MIContext, x)
@@ -1078,6 +1087,267 @@ static void bilateral_obmc(MIContext *mi_ctx, Block *block, int mb_x, int mb_y, 
     }
 }
 
+static void ff_global_blend_row(const uint8_t *src0,
+                                const uint8_t *src1,
+                                const uint8_t *alpha, /* XXX: only use alpha[0] */
+                                uint8_t *dst,
+                                int width)
+{
+    int x;
+    for (x = 0; x < width - 1; x += 2) {
+        dst[0] = (src0[0] * alpha[0] + src1[0] * (255 - alpha[0]) + 255) >> 8;
+        dst[1] = (src0[1] * alpha[0] + src1[1] * (255 - alpha[0]) + 255) >> 8;
+        src0 += 2;
+        src1 += 2;
+        dst  += 2;
+    }
+    if (width & 1) {
+        dst[0] = (src0[0] * alpha[0] + src1[0] * (255 - alpha[0]) + 255) >> 8;
+    }
+}
+
+static void ff_per_pixel_blend_row(const uint8_t *src0,
+                                   const uint8_t *src1,
+                                   const uint8_t *alpha,
+                                   uint8_t *dst,
+                                   int width)
+{
+    int x;
+    for (x = 0; x < width - 1; x += 2) {
+        dst[0] = (src0[0] * alpha[0] + src1[0] * (255 - alpha[0]) + 255) >> 8;
+        dst[1] = (src0[1] * alpha[0] + src1[1] * (255 - alpha[0]) + 255) >> 8;
+        src0 += 2;
+        src1 += 2;
+        alpha+= 2;
+        dst  += 2;
+    }
+    if (width & 1) {
+        dst[0] = (src0[0] * alpha[0] + src1[0] * (255 - alpha[0]) + 255) >> 8;
+    }
+}
+
+// per-pixel blend 8 pixels at a time.  width = n * 8 (n >=1)
+// dst[i] = ((src0[i]*alpah[i])+(src1[i]*(255-alpha[i]))+255)/256
+static void ff_per_pixel_blend_row_ssse3(const uint8_t *src0,
+                                         const uint8_t *src1,
+                                         const uint8_t *alpha,
+                                         uint8_t *dst,
+                                         int width)
+{
+  __asm__ volatile(
+      "pcmpeqb    %%xmm3,%%xmm3                  \n"
+      "psllw      $0x8,%%xmm3                    \n"
+      "mov        $0x80808080,%%eax              \n"
+      "movd       %%eax,%%xmm3                   \n"
+      "pshufd     $0x0,%%xmm4,%%xmm4             \n"
+      "mov        $0x807f807f,%%eax              \n"
+      "movd       %%eax,%%xmm5                   \n"
+      "pshufd     $0x0,%%xmm5,%%xmm5             \n"
+      "sub        %2,%0                          \n"
+      "sub        %2,%1                          \n"
+      "sub        %2,%3                          \n"
+
+      // 8 pixel per loop.
+      "1:                                        \n"
+      "movq       (%2),%%xmm0                    \n"
+      "punpcklbw  %%xmm0,%%xmm0                  \n"
+      "pxor       %%xmm3,%%xmm0                  \n"
+      "movq       (%0,%2,1),%%xmm1               \n"
+      "movq       (%1,%2,1),%%xmm2               \n"
+      "punpcklbw  %%xmm2,%%xmm1                  \n"
+      "psubb      %%xmm4,%%xmm1                  \n"
+      "pmaddubsw  %%xmm1,%%xmm0                  \n"
+      "paddw      %%xmm5,%%xmm0                  \n"
+      "psrlw      $0x8,%%xmm0                    \n"
+      "packuswb   %%xmm0,%%xmm0                  \n"
+      "movq       %%xmm0,(%3,%2,1)               \n"
+      "lea        0x8(%2),%2                     \n"
+      "sub        $0x8,%4                        \n"
+      "jg        1b                              \n"
+      : "+r"(src0),   // %0
+        "+r"(src1),   // %1
+        "+r"(alpha),  // %2
+        "+r"(dst),    // %3
+        "+rm"(width)  // %4
+        ::"memory",
+        "cc", "eax", "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5");
+}
+
+// per-pixe blend 32 pixels at a time.  width = n * 32 (n >=1)
+// dst[i] = ((src0[i]*alpah[i])+(src1[i]*(255-alpha[i]))+255)/256
+static void ff_per_pixel_blend_row_avx2(const uint8_t *src0,
+                                        const uint8_t *src1,
+                                        const uint8_t *alpha,
+                                        uint8_t *dst,
+                                        int width)
+{
+  __asm__ volatile(
+      "vpcmpeqb   %%ymm5,%%ymm5,%%ymm5           \n"
+      "vpsllw     $0x8,%%ymm5,%%ymm5             \n"
+      "mov        $0x80808080,%%eax              \n"
+      "vmovd      %%eax,%%xmm6                   \n"
+      "vbroadcastss %%xmm6,%%ymm6                \n"
+      "mov        $0x807f807f,%%eax              \n"
+      "vmovd      %%eax,%%xmm7                   \n"
+      "vbroadcastss %%xmm7,%%ymm7                \n"
+      "sub        %2,%0                          \n"
+      "sub        %2,%1                          \n"
+      "sub        %2,%3                          \n"
+
+      // 32 pixel per loop.
+      "1:                                        \n"
+      "vmovdqu    (%2),%%ymm0                    \n"
+      "vpunpckhbw %%ymm0,%%ymm0,%%ymm3           \n"
+      "vpunpcklbw %%ymm0,%%ymm0,%%ymm0           \n"
+      "vpxor      %%ymm5,%%ymm3,%%ymm3           \n"
+      "vpxor      %%ymm5,%%ymm0,%%ymm0           \n"
+      "vmovdqu    (%0,%2,1),%%ymm1               \n"
+      "vmovdqu    (%1,%2,1),%%ymm2               \n"
+      "vpunpckhbw %%ymm2,%%ymm1,%%ymm4           \n"
+      "vpunpcklbw %%ymm2,%%ymm1,%%ymm1           \n"
+      "vpsubb     %%ymm6,%%ymm4,%%ymm4           \n"
+      "vpsubb     %%ymm6,%%ymm1,%%ymm1           \n"
+      "vpmaddubsw %%ymm4,%%ymm3,%%ymm3           \n"
+      "vpmaddubsw %%ymm1,%%ymm0,%%ymm0           \n"
+      "vpaddw     %%ymm7,%%ymm3,%%ymm3           \n"
+      "vpaddw     %%ymm7,%%ymm0,%%ymm0           \n"
+      "vpsrlw     $0x8,%%ymm3,%%ymm3             \n"
+      "vpsrlw     $0x8,%%ymm0,%%ymm0             \n"
+      "vpackuswb  %%ymm3,%%ymm0,%%ymm0           \n"
+      "vmovdqu    %%ymm0,(%3,%2,1)               \n"
+      "lea        0x20(%2),%2                    \n"
+      "sub        $0x20,%4                       \n"
+      "jg        1b                              \n"
+      "vzeroupper                                \n"
+      : "+r"(src0),   // %0
+        "+r"(src1),   // %1
+        "+r"(alpha),  // %2
+        "+r"(dst),    // %3
+        "+rm"(width)  // %4
+        ::"memory",
+        "cc", "eax", "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6",
+         "xmm7");
+}
+
+void ff_global_blend_row_ssse3(const uint8_t *src0,
+                               const uint8_t *src1,
+                               const uint8_t *alpha,
+                               uint8_t *dst,
+                               int width);
+
+// global blend 8 pixels at a time. width = n * 8 (n >=1)
+// dst[i] = ((src0[i]*alpah[0])+(src1[i]*(255-alpha[0]))+255)/256
+void ff_global_blend_row_ssse3(const uint8_t *src0,
+                               const uint8_t *src1,
+                               const uint8_t *alpha,
+                               uint8_t *dst,
+                               int width)
+{
+  __asm__ volatile(
+      "pcmpeqb    %%xmm3,%%xmm3                  \n"
+      "psllw      $0x8,%%xmm3                    \n"
+      "mov        $0x80808080,%%eax              \n"
+      "movd       %%eax,%%xmm4                   \n"
+      "pshufd     $0x0,%%xmm4,%%xmm4             \n"
+      "mov        $0x807f807f,%%eax              \n"
+      "movd       %%eax,%%xmm5                   \n"
+      "pshufd     $0x0,%%xmm5,%%xmm5             \n"
+      // a => xmm6 [a a a a a a a a a a a a a a a a ]
+      "movb       (%2),%%al                      \n"
+      "movd       %%eax,%%xmm6                   \n" // xmm6 = x x x x x x x x x x x x x x x a
+      "punpcklbw  %%xmm6,%%xmm6                  \n" // xmm6 = x x x x x x x x x x x x x x a a
+      "punpcklbw  %%xmm6,%%xmm6                  \n" // xmm6 = x x x x x x x x x x x x a a a a
+      "punpcklbw  %%xmm6,%%xmm6                  \n" // xmm6 = x x x x x x x x a a a a a a a a
+      "punpcklbw  %%xmm6,%%xmm6                  \n" // xmm6 = a a a a a a a a a a a a a a a a
+
+      // 8 pixel per loop.
+      "1:                                        \n"
+      "movdqu     %%xmm6,%%xmm0                  \n" // xmm0 = xmm6
+      "pxor       %%xmm3,%%xmm0                  \n"
+
+      "movq       (%0),%%xmm1                    \n"
+      "movq       (%1),%%xmm2                    \n"
+      "punpcklbw  %%xmm2,%%xmm1                  \n"
+      "psubb      %%xmm4,%%xmm1                  \n"
+
+      "pmaddubsw  %%xmm1,%%xmm0                  \n"
+      "paddw      %%xmm5,%%xmm0                  \n"
+      "psrlw      $0x8,%%xmm0                    \n"
+      "packuswb   %%xmm0,%%xmm0                  \n"
+      "movq       %%xmm0,(%3)                    \n"
+
+      "lea        0x8(%0),%0                     \n" // src0+8
+      "lea        0x8(%1),%1                     \n" // src1+8
+      "lea        0x8(%3),%3                     \n" // dst+8
+      "sub        $0x8,%4                        \n"
+      "jg        1b                              \n"
+      : "+r"(src0),   // %0
+        "+r"(src1),   // %1
+        "+r"(alpha),  // %2
+        "+r"(dst),    // %3
+        "+rm"(width)  // %4
+        ::"memory",
+         "cc", "eax", "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6");
+}
+
+// global blend 32 pixels at a time. width = n * 32 (n >=1)
+// dst[i] = ((src0[i]*alpah[0])+(src1[i]*(255-alpha[0]))+255)/256
+static void ff_global_blend_row_avx2(const uint8_t *src0,
+                                     const uint8_t *src1,
+                                     const uint8_t *alpha,
+                                     uint8_t *dst,
+                                     int width)
+{
+  __asm__ volatile(
+      "vpcmpeqb   %%ymm5,%%ymm5,%%ymm5           \n"
+      "vpsllw     $0x8,%%ymm5,%%ymm5             \n"
+      "mov        $0x80808080,%%eax              \n"
+      "vmovd      %%eax,%%xmm6                   \n"
+      "vbroadcastss %%xmm6,%%ymm6                \n"
+      "mov        $0x807f807f,%%eax              \n"
+      "vmovd      %%eax,%%xmm7                   \n"
+      "vbroadcastss %%xmm7,%%ymm7                \n"
+      "sub        %2,%0                          \n"
+      "sub        %2,%1                          \n"
+      "sub        %2,%3                          \n"
+
+      // 32 pixel per loop.
+      "1:                                        \n"
+      "vmovdqu    (%2),%%ymm0                    \n"
+      "vpunpckhbw %%ymm0,%%ymm0,%%ymm3           \n"
+      "vpunpcklbw %%ymm0,%%ymm0,%%ymm0           \n"
+      "vpxor      %%ymm5,%%ymm3,%%ymm3           \n"
+      "vpxor      %%ymm5,%%ymm0,%%ymm0           \n"
+
+      "vmovdqu    (%0,%2,1),%%ymm1               \n"
+      "vmovdqu    (%1,%2,1),%%ymm2               \n"
+      "vpunpckhbw %%ymm2,%%ymm1,%%ymm4           \n"
+      "vpunpcklbw %%ymm2,%%ymm1,%%ymm1           \n"
+      "vpsubb     %%ymm6,%%ymm4,%%ymm4           \n"
+      "vpsubb     %%ymm6,%%ymm1,%%ymm1           \n"
+      "vpmaddubsw %%ymm4,%%ymm3,%%ymm3           \n"
+      "vpmaddubsw %%ymm1,%%ymm0,%%ymm0           \n"
+      "vpaddw     %%ymm7,%%ymm3,%%ymm3           \n"
+      "vpaddw     %%ymm7,%%ymm0,%%ymm0           \n"
+      "vpsrlw     $0x8,%%ymm3,%%ymm3             \n"
+      "vpsrlw     $0x8,%%ymm0,%%ymm0             \n"
+      "vpackuswb  %%ymm3,%%ymm0,%%ymm0           \n"
+
+      "vmovdqu    %%ymm0,(%3,%2,1)               \n"
+      "lea        0x20(%2),%2                    \n"
+      "sub        $0x20,%4                       \n"
+      "jg        1b                              \n"
+      "vzeroupper                                \n"
+      : "+r"(src0),   // %0
+        "+r"(src1),   // %1
+        "+r"(alpha),  // %2
+        "+r"(dst),    // %3
+        "+rm"(width)  // %4
+        ::"memory",
+        "cc", "eax", "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6",
+         "xmm7");
+}
+
 static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -1119,12 +1389,100 @@ static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
                     height = AV_CEIL_RSHIFT(height, mi_ctx->log2_chroma_h);
                 }
 
+                #if 0
                 for (y = 0; y < height; y++) {
                     for (x = 0; x < width; x++) {
                         avf_out->data[plane][x + y * avf_out->linesize[plane]] =
                             (alpha  * mi_ctx->frames[2].avf->data[plane][x + y * mi_ctx->frames[2].avf->linesize[plane]] +
                              (ALPHA_MAX - alpha) * mi_ctx->frames[1].avf->data[plane][x + y * mi_ctx->frames[1].avf->linesize[plane]] + 512) >> 10;
                     }
+                }
+                #else
+                {
+                    __m128i *pA, *pB, *pD;
+                    __m128i A, B, D1, D2, alfa, beta, gamma, zero;
+                    unsigned short af1, af2, af3;
+
+                    af1 = (unsigned short)(alpha*256/1024);
+                    af2 = (unsigned short)((1024 - alpha)*256/1024);
+                    af3 = 128;
+                    alfa = _mm_set1_epi16(af1);
+                    beta = _mm_set1_epi16(af2);
+                    gamma = _mm_set1_epi16(af3);
+                    zero = _mm_setzero_si128();
+                    for (y = 0; y < height; y++) {
+                        pA = (__m128i *)&mi_ctx->frames[2].avf->data[plane][y * mi_ctx->frames[2].avf->linesize[plane]];
+                        pB = (__m128i *)&mi_ctx->frames[1].avf->data[plane][y * mi_ctx->frames[1].avf->linesize[plane]];
+                        pD = (__m128i *)&avf_out->data[plane][y * avf_out->linesize[plane]];
+                        /* pA, pB, and point to the beginning memory address of the image
+                           pixels in S1, S2, and D */
+                        int loop = width/8;
+                        for (x = 0; x < loop; x++) {
+                            A = _mm_unpacklo_epi8(*pA, zero); // PUNPCKLBW
+                            B = _mm_unpacklo_epi8(*pB, zero); // PUNPCKLBW
+                            A = _mm_mullo_epi16(A, alfa); // PMULLW
+                            B = _mm_mullo_epi16(B, beta); // PMULLW
+                            D1 = _mm_add_epi16(A, B); // PADDW
+                            D1 = _mm_add_epi16(D1, gamma); // PADDW
+                            D1 = _mm_srli_epi16(D1, 8); // PSRLW
+
+                            A = _mm_unpackhi_epi8(*pA, zero); // PUNPCKHBW
+                            B = _mm_unpackhi_epi8(*pB, zero); // PUNPCKHBW
+                            A = _mm_mullo_epi16(A, alfa);
+                            B = _mm_mullo_epi16(B, beta);
+                            D2 = _mm_add_epi16(A, B);
+                            D2 = _mm_add_epi16(D2, gamma);
+                            D2 = _mm_srli_epi16(D2, 8);
+
+                            *pD = _mm_packus_epi16(D1, D2);
+
+                            pA++;
+                            pB++;
+                            pD++;
+                        }
+
+                        for (x = loop * 8; x < width; x++) {
+                            avf_out->data[plane][x + y * avf_out->linesize[plane]] =
+                                (alpha  * mi_ctx->frames[2].avf->data[plane][x + y * mi_ctx->frames[2].avf->linesize[plane]] +
+                                 (ALPHA_MAX - alpha) * mi_ctx->frames[1].avf->data[plane][x + y * mi_ctx->frames[1].avf->linesize[plane]] + 512) >> 10;
+                        }
+
+                    }
+                }
+                #endif
+                // SSE3
+                {
+                    uint8_t src0[] = {0x01, 0x23, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE};
+                    uint8_t src1[] = {0xF0, 0xDE, 0xBC, 0x9A, 0x78, 0x56, 0x34, 0x23};
+                    uint8_t alpha[] = {0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55};
+                    uint8_t dst[8] = {0};
+
+                    printf("SSSE3: \n");
+                    ff_global_blend_row_ssse3(src0, src1, alpha, dst, 8);
+                    printf("%0x %0x %0x %0x %0x %0x %0x %0x.\n", dst[0], dst[1], dst[2], dst[3], dst[4], dst[5], dst[6], dst[7]);
+                }
+
+                // AVX2
+                {
+                    uint8_t src0[] = {0x01, 0x23, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE,
+                                      0x01, 0x23, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE,
+                                      0x01, 0x23, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE,
+                                      0x01, 0x23, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE};
+                    uint8_t src1[] = {0xF0, 0xDE, 0xBC, 0x9A, 0x78, 0x56, 0x34, 0x23,
+                                      0xF0, 0xDE, 0xBC, 0x9A, 0x78, 0x56, 0x34, 0x23,
+                                      0xF0, 0xDE, 0xBC, 0x9A, 0x78, 0x56, 0x34, 0x23,
+                                      0xF0, 0xDE, 0xBC, 0x9A, 0x78, 0x56, 0x34, 0x23};
+                    uint8_t alpha[] = {0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+                                       0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+                                       0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+                                       0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55};
+                    uint8_t dst[32] = {0};
+                    printf("AVX2: \n");
+                    ff_global_blend_row_avx2(src0, src1, alpha, dst, 32);
+                    printf("%0x %0x %0x %0x %0x %0x %0x %0x.\n", dst[0], dst[1], dst[2], dst[3], dst[4], dst[5], dst[6], dst[7]);
+                    printf("%0x %0x %0x %0x %0x %0x %0x %0x.\n", dst[8], dst[9], dst[10], dst[11], dst[12], dst[13], dst[14], dst[15]);
+                    printf("%0x %0x %0x %0x %0x %0x %0x %0x.\n", dst[16], dst[17], dst[18], dst[19], dst[20], dst[21], dst[22], dst[23]);
+                    printf("%0x %0x %0x %0x %0x %0x %0x %0x.\n", dst[24], dst[25], dst[26], dst[27], dst[28], dst[29], dst[30], dst[31]);
                 }
             }
 
