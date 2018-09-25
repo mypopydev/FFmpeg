@@ -1465,7 +1465,7 @@ static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
                     uint8_t af1;
 
                     af1 = (uint8_t)(alpha*255/1024);
-#if 0
+#if 1
                     for (y = 0; y < height; y++) {
                         pA = (uint8_t *)&mi_ctx->frames[2].avf->data[plane][y * mi_ctx->frames[2].avf->linesize[plane]];
                         pB = (uint8_t *)&mi_ctx->frames[1].avf->data[plane][y * mi_ctx->frames[1].avf->linesize[plane]];
@@ -1485,6 +1485,7 @@ static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
                         }
                     }
 #endif
+#if 0
                     for (y = 0; y < height; y++) {
                         pA = (uint8_t *)&mi_ctx->frames[2].avf->data[plane][y * mi_ctx->frames[2].avf->linesize[plane]];
                         pB = (uint8_t *)&mi_ctx->frames[1].avf->data[plane][y * mi_ctx->frames[1].avf->linesize[plane]];
@@ -1503,6 +1504,7 @@ static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
                                  (ALPHA_MAX - alpha) * mi_ctx->frames[1].avf->data[plane][x + y * mi_ctx->frames[1].avf->linesize[plane]] + 512) >> 10;
                         }
                     }
+#endif
                 }
                 #endif
                 // SSE3
