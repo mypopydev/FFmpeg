@@ -1,4 +1,5 @@
-OBJS += x86/cpu.o                                                       \
+OBJS += x86/blend_init.o                                                \
+        x86/cpu.o                                                       \
         x86/fixed_dsp_init.o                                            \
         x86/float_dsp_init.o                                            \
         x86/imgutils_init.o                                             \

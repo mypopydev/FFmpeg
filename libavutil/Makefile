@@ -10,6 +10,7 @@ HEADERS = adler32.h                                                     \
           avstring.h                                                    \
           avutil.h                                                      \
           base64.h                                                      \
+          blend.h                                                       \
           blowfish.h                                                    \
           bprint.h                                                      \
           bswap.h                                                       \
@@ -95,6 +96,7 @@ OBJS = adler32.o                                                        \
        audio_fifo.o                                                     \
        avstring.o                                                       \
        base64.o                                                         \
+       blend.o                                                          \
        blowfish.o                                                       \
        bprint.o                                                         \
        buffer.o                                                         \
