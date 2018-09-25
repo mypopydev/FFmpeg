@@ -27,6 +27,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/pixelutils.h"
+#include "libavutil/blend.h"
 #include "avfilter.h"
 #include "formats.h"
 #include "internal.h"
@@ -1113,6 +1114,10 @@ static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
             for (plane = 0; plane < mi_ctx->nb_planes; plane++) {
                 int width = avf_out->width;
                 int height = avf_out->height;
+                uint8_t *src0 = NULL;
+                uint8_t *src1 = NULL;
+                uint8_t *dst = NULL;
+                uint8_t alpha1 = (uint8_t)(alpha*256/1024);
 
                 if (plane == 1 || plane == 2) {
                     width = AV_CEIL_RSHIFT(width, mi_ctx->log2_chroma_w);
@@ -1120,11 +1125,12 @@ static void interpolate(AVFilterLink *inlink, AVFrame *avf_out)
                 }
 
                 for (y = 0; y < height; y++) {
-                    for (x = 0; x < width; x++) {
-                        avf_out->data[plane][x + y * avf_out->linesize[plane]] =
-                            (alpha  * mi_ctx->frames[2].avf->data[plane][x + y * mi_ctx->frames[2].avf->linesize[plane]] +
-                             (ALPHA_MAX - alpha) * mi_ctx->frames[1].avf->data[plane][x + y * mi_ctx->frames[1].avf->linesize[plane]] + 512) >> 10;
-                    }
+                    src0 = &mi_ctx->frames[2].avf->data[plane][y * mi_ctx->frames[2].avf->linesize[plane]];
+                    src1 = &mi_ctx->frames[1].avf->data[plane][y * mi_ctx->frames[1].avf->linesize[plane]];
+                    dst = &avf_out->data[plane][y * avf_out->linesize[plane]];
+
+                    av_global_blend_row(src0, src1, (const uint8_t *)&alpha1, dst, width);
+
                 }
             }
 
