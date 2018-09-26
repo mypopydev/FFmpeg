@@ -2389,7 +2389,9 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output, int64_
     // The following line may be required in some cases where there is no parser
     // or the parser does not has_b_frames correctly
     if (ist->st->codecpar->video_delay < ist->dec_ctx->has_b_frames) {
-        if (ist->dec_ctx->codec_id == AV_CODEC_ID_H264) {
+        if (ist->dec_ctx->codec_id == AV_CODEC_ID_H264 ||
+            ist->dec_ctx->codec_id == AV_CODEC_ID_HEVC ||
+            ist->dec_ctx->codec_id == AV_CODEC_ID_MPEG4) {
             ist->st->codecpar->video_delay = ist->dec_ctx->has_b_frames;
         } else
             av_log(ist->dec_ctx, AV_LOG_WARNING,
