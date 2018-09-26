@@ -588,22 +588,19 @@ int ff_vaapi_common_frame_params(AVCodecContext *avctx,
 {
     AVHWFramesContext *hw_frames = (AVHWFramesContext *)hw_frames_ctx->data;
     AVHWDeviceContext *device_ctx = hw_frames->device_ctx;
-    AVVAAPIDeviceContext *hwctx;
+    VAAPIDecodeContext *vadec_ctx = avctx->internal->hwaccel_priv_data;
     VAConfigID va_config = VA_INVALID_ID;
     int err;
 
     if (device_ctx->type != AV_HWDEVICE_TYPE_VAAPI)
         return AVERROR(EINVAL);
-    hwctx = device_ctx->hwctx;
 
     err = vaapi_decode_make_config(avctx, hw_frames->device_ref, &va_config,
                                    hw_frames_ctx);
     if (err)
         return err;
 
-    if (va_config != VA_INVALID_ID)
-        vaDestroyConfig(hwctx->display, va_config);
-
+    vadec_ctx->va_config = va_config;
     return 0;
 }
 
@@ -664,11 +661,6 @@ int ff_vaapi_decode_init(AVCodecContext *avctx)
     ctx->hwfc   = ctx->frames->hwctx;
     ctx->device = ctx->frames->device_ctx;
     ctx->hwctx  = ctx->device->hwctx;
-
-    err = vaapi_decode_make_config(avctx, ctx->frames->device_ref,
-                                   &ctx->va_config, avctx->hw_frames_ctx);
-    if (err)
-        goto fail;
 
     vas = vaCreateContext(ctx->hwctx->display, ctx->va_config,
                           avctx->coded_width, avctx->coded_height,
