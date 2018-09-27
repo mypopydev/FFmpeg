@@ -23,4 +23,6 @@
 
 void ff_pixelutils_sad_init_x86(av_pixelutils_sad_fn *sad, int aligned);
 
+void ff_pixelutils_sad16_init_x86(av_pixelutils_sad16_fn *sad16, int aligned);
+
 #endif /* AVUTIL_X86_PIXELUTILS_H */

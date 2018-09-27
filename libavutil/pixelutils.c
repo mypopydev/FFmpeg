@@ -61,6 +61,42 @@ static const av_pixelutils_sad_fn sad_c[] = {
     block_sad_32x32_c,
 };
 
+static av_always_inline int sad16_wxh(const uint16_t *src1, ptrdiff_t stride1,
+                                      const uint16_t *src2, ptrdiff_t stride2,
+                                      int w, int h)
+{
+    int x, y, sum = 0;
+
+    for (y = 0; y < h; y++) {
+        for (x = 0; x < w; x++)
+            sum += abs(src1[x] - src2[x]);
+        src1 += stride1;
+        src2 += stride2;
+    }
+    return sum;
+}
+
+#define DECLARE_BLOCK_FUNCTIONS_16(size)                                               \
+static int block_sad16_##size##x##size##_c(const uint16_t *src1, ptrdiff_t stride1,    \
+                                           const uint16_t *src2, ptrdiff_t stride2)    \
+{                                                                                      \
+    return sad16_wxh(src1, stride1, src2, stride2, size, size);                        \
+}
+
+DECLARE_BLOCK_FUNCTIONS_16(2)
+DECLARE_BLOCK_FUNCTIONS_16(4)
+DECLARE_BLOCK_FUNCTIONS_16(8)
+DECLARE_BLOCK_FUNCTIONS_16(16)
+DECLARE_BLOCK_FUNCTIONS_16(32)
+
+static const av_pixelutils_sad16_fn sad16_c[] = {
+    block_sad16_2x2_c,
+    block_sad16_4x4_c,
+    block_sad16_8x8_c,
+    block_sad16_16x16_c,
+    block_sad16_32x32_c,
+};
+
 #endif /* CONFIG_PIXELUTILS */
 
 av_pixelutils_sad_fn av_pixelutils_get_sad_fn(int w_bits, int h_bits, int aligned, void *log_ctx)
@@ -85,5 +121,30 @@ av_pixelutils_sad_fn av_pixelutils_get_sad_fn(int w_bits, int h_bits, int aligne
 #endif
 
     return sad[w_bits - 1];
+#endif
+}
+
+av_pixelutils_sad16_fn av_pixelutils_get_sad16_fn(int w_bits, int h_bits, int aligned, void *log_ctx)
+{
+#if !CONFIG_PIXELUTILS
+    av_log(log_ctx, AV_LOG_ERROR, "pixelutils support is required "
+           "but libavutil is not compiled with it\n");
+    return NULL;
+#else
+    av_pixelutils_sad16_fn sad16[FF_ARRAY_ELEMS(sad16_c)];
+
+    memcpy(sad16, sad16_c, sizeof(sad16));
+
+    if (w_bits < 1 || w_bits > FF_ARRAY_ELEMS(sad16) ||
+        h_bits < 1 || h_bits > FF_ARRAY_ELEMS(sad16))
+        return NULL;
+    if (w_bits != h_bits) // only squared sad for now
+        return NULL;
+
+#if ARCH_X86
+    ff_pixelutils_sad16_init_x86(sad16, aligned);
+#endif
+
+    return sad16[w_bits - 1];
 #endif
 }

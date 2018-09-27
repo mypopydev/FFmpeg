@@ -92,3 +92,50 @@ void ff_pixelutils_sad_init_x86(av_pixelutils_sad_fn *sad, int aligned)
         }
     }
 }
+
+int ff_pixelutils_sad16_4x4_mmxext(const uint16_t *src1, ptrdiff_t stride1,
+                                   const uint16_t *src2, ptrdiff_t stride2);
+int ff_pixelutils_sad16_4x4_ssse3(const uint16_t *src1, ptrdiff_t stride1,
+                                  const uint16_t *src2, ptrdiff_t stride2);
+
+int ff_pixelutils_sad16_8x8_mmxext(const uint16_t *src1, ptrdiff_t stride1,
+                                   const uint16_t *src2, ptrdiff_t stride2);
+int ff_pixelutils_sad16_8x8_sse2(const uint16_t *src1, ptrdiff_t stride1,
+                                 const uint16_t *src2, ptrdiff_t stride2);
+int ff_pixelutils_sad16_8x8_ssse3(const uint16_t *src1, ptrdiff_t stride1,
+                                  const uint16_t *src2, ptrdiff_t stride2);
+
+int ff_pixelutils_sad16_16x16_mmxext(const uint16_t *src1, ptrdiff_t stride1,
+                                     const uint16_t *src2, ptrdiff_t stride2);
+int ff_pixelutils_sad16_16x16_sse2(const uint16_t *src1, ptrdiff_t stride1,
+                                   const uint16_t *src2, ptrdiff_t stride2);
+int ff_pixelutils_sad16_16x16_ssse3(const uint16_t *src1, ptrdiff_t stride1,
+                                    const uint16_t *src2, ptrdiff_t stride2);
+int ff_pixelutils_sad16_16x16_avx2(const uint16_t *src1, ptrdiff_t stride1,
+                                   const uint16_t *src2, ptrdiff_t stride2);
+
+void ff_pixelutils_sad16_init_x86(av_pixelutils_sad16_fn *sad16, int aligned)
+{
+    int cpu_flags = av_get_cpu_flags();
+
+    if (EXTERNAL_MMXEXT(cpu_flags)) {
+        sad16[1] = ff_pixelutils_sad16_4x4_mmxext;
+        sad16[2] = ff_pixelutils_sad16_8x8_mmxext;
+        sad16[3] = ff_pixelutils_sad16_16x16_mmxext;
+    }
+
+    if (EXTERNAL_SSE2(cpu_flags)) {
+        sad16[2] = ff_pixelutils_sad16_8x8_sse2;
+        sad16[3] = ff_pixelutils_sad16_16x16_sse2;
+    }
+
+    if (EXTERNAL_SSSE3(cpu_flags)) {
+        sad16[1] = ff_pixelutils_sad16_4x4_ssse3;
+        sad16[2] = ff_pixelutils_sad16_8x8_ssse3;
+        sad16[3] = ff_pixelutils_sad16_16x16_ssse3;
+    }
+
+    if (EXTERNAL_AVX2_FAST(cpu_flags)) {
+        sad16[3] = ff_pixelutils_sad16_16x16_avx2;
+    }
+}

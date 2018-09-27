@@ -49,4 +49,30 @@ typedef int (*av_pixelutils_sad_fn)(const uint8_t *src1, ptrdiff_t stride1,
 av_pixelutils_sad_fn av_pixelutils_get_sad_fn(int w_bits, int h_bits,
                                               int aligned, void *log_ctx);
 
+/**
+ * Sum of abs(uint16_t src1[x] - uint16_t src2[x])
+ */
+typedef int (*av_pixelutils_sad16_fn)(const uint16_t *src1, ptrdiff_t stride1,
+                                      const uint16_t *src2, ptrdiff_t stride2);
+
+/**
+ * Get a potentially optimized pointer to a Sum-of-absolute-differences
+ * function (see the av_pixelutils_sad16_fn prototype).
+ *
+ * @param w_bits  1<<w_bits is the requested width of the block size
+ * @param h_bits  1<<h_bits is the requested height of the block size
+ * @param aligned If set to 2, the returned sad function will assume src1 and
+ *                src2 addresses are aligned on the block size.
+ *                If set to 1, the returned sad function will assume src1 is
+ *                aligned on the block size.
+ *                If set to 0, the returned sad function assume no particular
+ *                alignment.
+ * @param log_ctx context used for logging, can be NULL
+ *
+ * @return a pointer to the SAD16 function or NULL in case of error (because of
+ *         invalid parameters)
+ */
+av_pixelutils_sad16_fn av_pixelutils_get_sad16_fn(int w_bits, int h_bits,
+                                                  int aligned, void *log_ctx);
+
 #endif /* AVUTIL_PIXELUTILS_H */
