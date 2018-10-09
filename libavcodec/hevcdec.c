@@ -317,7 +317,6 @@ static void export_stream_params(AVCodecContext *avctx, const HEVCParamSets *ps,
     const HEVCWindow *ow = &sps->output_window;
     unsigned int num = 0, den = 0;
 
-    avctx->pix_fmt             = sps->pix_fmt;
     avctx->coded_width         = sps->width;
     avctx->coded_height        = sps->height;
     avctx->width               = sps->width  - ow->left_offset - ow->right_offset;
@@ -357,7 +356,7 @@ static void export_stream_params(AVCodecContext *avctx, const HEVCParamSets *ps,
                   num, den, 1 << 30);
 }
 
-static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
+static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps, int force_callback)
 {
 #define HWACCEL_MAX (CONFIG_HEVC_DXVA2_HWACCEL + \
                      CONFIG_HEVC_D3D11VA_HWACCEL * 2 + \
@@ -366,6 +365,8 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
                      CONFIG_HEVC_VIDEOTOOLBOX_HWACCEL + \
                      CONFIG_HEVC_VDPAU_HWACCEL)
     enum AVPixelFormat pix_fmts[HWACCEL_MAX + 2], *fmt = pix_fmts;
+    const enum AVPixelFormat *choices = pix_fmts;
+    int i;
 
     switch (sps->pix_fmt) {
     case AV_PIX_FMT_YUV420P:
@@ -418,6 +419,11 @@ static enum AVPixelFormat get_format(HEVCContext *s, const HEVCSPS *sps)
     *fmt++ = sps->pix_fmt;
     *fmt = AV_PIX_FMT_NONE;
 
+    if (!force_callback)
+        for (i = 0; choices[i] != AV_PIX_FMT_NONE; i++)
+            if (choices[i] == s->avctx->pix_fmt)
+                return choices[i];
+
     return ff_thread_get_format(s->avctx, pix_fmts);
 }
 
@@ -438,8 +444,6 @@ static int set_sps(HEVCContext *s, const HEVCSPS *sps,
         goto fail;
 
     export_stream_params(s->avctx, &s->ps, sps);
-
-    s->avctx->pix_fmt = pix_fmt;
 
     ff_hevc_pred_init(&s->hpc,     sps->bit_depth);
     ff_hevc_dsp_init (&s->hevcdsp, sps->bit_depth);
@@ -526,10 +530,11 @@ static int hls_slice_header(HEVCContext *s)
         if (ret < 0)
             return ret;
 
-        pix_fmt = get_format(s, sps);
+        pix_fmt = get_format(s, sps, s->avctx->hwaccel ? 0 : 1);
         if (pix_fmt < 0)
             return pix_fmt;
-        s->avctx->pix_fmt = pix_fmt;
+        if (s->avctx->pix_fmt != pix_fmt)
+            s->avctx->pix_fmt = pix_fmt;
 
         s->seq_decode = (s->seq_decode + 1) & 0xff;
         s->max_ra     = INT_MAX;
