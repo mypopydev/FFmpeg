@@ -70,14 +70,63 @@ static int run_test(const char *test,
     return ret;
 }
 
+static int run_single_test_16(const char *test,
+                              const uint16_t *block1, ptrdiff_t stride1,
+                              const uint16_t *block2, ptrdiff_t stride2,
+                              int align, int n)
+{
+    int out, ref;
+    av_pixelutils_sad16_fn f_ref = sad16_c[n - 1];
+    av_pixelutils_sad16_fn f_out = av_pixelutils_get_sad16_fn(n, n, align, NULL);
+
+    switch (align) {
+    case 0: block1++; block2++; break;
+    case 1:           block2++; break;
+    case 2:                     break;
+    }
+
+    out = f_out(block1, stride1, block2, stride2);
+    ref = f_ref(block1, stride1, block2, stride2);
+    printf("[%s] [%c%c] SAD (16bits) [%s] %dx%d=%d ref=%d\n",
+           out == ref ? "OK" : "FAIL",
+           align ? 'A' : 'U', align == 2 ? 'A' : 'U',
+           test, 1<<n, 1<<n, out, ref);
+    return out != ref;
+}
+
+static int run_test_16(const char *test,
+                       const uint16_t *b1, const uint16_t *b2)
+{
+    int i, a, ret = 0;
+
+    for (a = 0; a < 3; a++) {
+        const uint16_t *block1 = b1;
+        const uint16_t *block2 = b2;
+
+        switch (a) {
+        case 0: block1++; block2++; break;
+        case 1:           block2++; break;
+        case 2:                     break;
+        }
+        for (i = 1; i <= FF_ARRAY_ELEMS(sad16_c); i++) {
+            int r = run_single_test_16(test, b1, W1, b2, W2, a, i);
+            if (r)
+                ret = r;
+        }
+    }
+    return ret;
+}
+
 int main(void)
 {
     int i, align, ret;
     uint8_t *buf1 = av_malloc(W1*H1);
     uint8_t *buf2 = av_malloc(W2*H2);
+    uint16_t *buf3 = av_malloc(2*W1*H1);
+    uint16_t *buf4 = av_malloc(2*W2*H2);
     uint32_t state = 0;
 
-    if (!buf1 || !buf2) {
+    if (!buf1 || !buf2 || !buf3 || !buf4) {
         fprintf(stderr, "malloc failure\n");
         ret = 1;
         goto end;
@@ -145,8 +194,55 @@ int main(void)
         }
     }
 
+    /* Check for maximum SAD */
+    memset(buf3, 0xff, 2*W1*H1);
+    memset(buf4, 0x00, 2*W2*H2);
+    ret = run_test_16("max", buf3, buf4);
+    if (ret < 0)
+        goto end;
+
+    /* Check for minimum SAD */
+    memset(buf3, 0x90, 2*W1*H1);
+    memset(buf3, 0x90, 2*W2*H2);
+    ret = run_test_16("min", buf3, buf4);
+    if (ret < 0)
+        goto end;
+
+    /* Exact buffer sizes, to check for overreads */
+    for (i = 1; i <= 5; i++) {
+        for (align = 0; align < 3; align++) {
+            int size1, size2;
+
+            av_freep(&buf3);
+            av_freep(&buf4);
+
+            size1 = size2 = 1 << (i << 1);
+
+            switch (align) {
+            case 0: size1++; size2++; break;
+            case 1:          size2++; break;
+            case 2:                   break;
+            }
+
+            buf3 = av_malloc(2*size1);
+            buf4 = av_malloc(2*size2);
+            if (!buf3 || !buf4) {
+                fprintf(stderr, "malloc failure\n");
+                ret = 1;
+                goto end;
+            }
+            RANDOM_INIT(buf3, 2*size1);
+            RANDOM_INIT(buf3, 2*size2);
+            ret = run_single_test_16("small", buf3, 1<<i, buf4, 1<<i, align, i);
+            if (ret < 0)
+                goto end;
+        }
+    }
+
 end:
     av_free(buf1);
     av_free(buf2);
+    av_free(buf3);
+    av_free(buf4);
     return ret;
 }
