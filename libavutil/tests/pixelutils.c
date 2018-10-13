@@ -78,6 +78,7 @@ static int run_single_test_16(const char *test,
     int out, ref;
     av_pixelutils_sad16_fn f_ref = sad16_c[n - 1];
     av_pixelutils_sad16_fn f_out = av_pixelutils_get_sad16_fn(n, n, align, NULL);
+    //av_pixelutils_sad16_fn f_out = sad16_c[n - 1];
 
     switch (align) {
     case 0: block1++; block2++; break;
@@ -194,6 +195,21 @@ int main(void)
         }
     }
 
+#define RANDOM_INIT16(buf, size) do {             \
+    int k;                                        \
+    for (k = 0; k < size/2; k++) {                \
+        state = state * 1664525 + 1013904223;     \
+        buf[k] = state>>24;                       \
+    }                                             \
+} while (0)
+
+    /* Normal test with different strides */
+    RANDOM_INIT16(buf3, 2*W1*H1);
+    RANDOM_INIT16(buf4, 2*W2*H2);
+    ret = run_test_16("random", buf3, buf4);
+    if (ret < 0)
+        goto end;
+
     /* Check for maximum SAD */
     memset(buf3, 0xff, 2*W1*H1);
     memset(buf4, 0x00, 2*W2*H2);
@@ -203,7 +219,7 @@ int main(void)
 
     /* Check for minimum SAD */
     memset(buf3, 0x90, 2*W1*H1);
-    memset(buf3, 0x90, 2*W2*H2);
+    memset(buf4, 0x90, 2*W2*H2);
     ret = run_test_16("min", buf3, buf4);
     if (ret < 0)
         goto end;
@@ -231,8 +247,8 @@ int main(void)
                 ret = 1;
                 goto end;
             }
-            RANDOM_INIT(buf3, 2*size1);
-            RANDOM_INIT(buf3, 2*size2);
+            RANDOM_INIT16(buf3, 2*size1);
+            RANDOM_INIT16(buf4, 2*size2);
             ret = run_single_test_16("small", buf3, 1<<i, buf4, 1<<i, align, i);
             if (ret < 0)
                 goto end;

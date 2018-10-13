@@ -23,12 +23,10 @@
 
 %include "x86util.asm"
 
+SECTION_RODATA
+const pw_x,        times 16 dw 1
+
 SECTION .text
-
-cextern pw_1
-cextern pw_4
-cextern pw_8
-
 ;-------------------------------------------------------------------------------
 ; int ff_pixelutils_sad_8x8_mmx(const uint8_t *src1, ptrdiff_t stride1,
 ;                               const uint8_t *src2, ptrdiff_t stride2);
@@ -410,114 +408,114 @@ SAD_AVX2_32x32 u
 %endif
 %endmacro
 
-%macro HADDUWD 2
-%if cpuflag(xop) && sizeof%1 == 16
-    vphadduwd %1, %1
-%else
-    psrld %2, %1, 16
-    pslld %1, 16
-    psrld %1, 16
-    paddd %1, %2
-%endif
-%endmacro
+;; %macro HADDUWD 2
+;; %if cpuflag(xop) && sizeof%1 == 16
+;;     vphadduwd %1, %1
+;; %else
+;;     psrld %2, %1, 16
+;;     pslld %1, 16
+;;     psrld %1, 16
+;;     paddd %1, %2
+;; %endif
+;; %endmacro
 
-%macro HADDUW 2
-%if cpuflag(xop) && sizeof%1 == 16
-    vphadduwq %1, %1
-    MOVHL     %2, %1
-    paddd     %1, %2
-%else
-    HADDUWD   %1, %2
-    HADDD     %1, %2
-%endif
-%endmacro
+;; %macro HADDUW 2
+;; %if cpuflag(xop) && sizeof%1 == 16
+;;     vphadduwq %1, %1
+;;     MOVHL     %2, %1
+;;     paddd     %1, %2
+;; %else
+;;     HADDUWD   %1, %2
+;;     HADDD     %1, %2
+;; %endif
+;; %endmacro
 	
 ;=============================================================================
 ; SAD MMX
 ;=============================================================================
 
-%macro SAD_INC_1x16P_MMX 0
-    movu    m1, [r0+ 0]
-    movu    m2, [r0+ 8]
-    movu    m3, [r0+16]
-    movu    m4, [r0+24]
-    psubw   m1, [r2+ 0]
-    psubw   m2, [r2+ 8]
-    psubw   m3, [r2+16]
-    psubw   m4, [r2+24]
-    ABSW2   m1, m2, m1, m2, m5, m6
-    ABSW2   m3, m4, m3, m4, m7, m5
-    lea     r0, [r0+2*r1]
-    lea     r2, [r2+2*r3]
-    paddw   m1, m2
-    paddw   m3, m4
-    paddw   m0, m1
-    paddw   m0, m3
-%endmacro
+;; %macro SAD_INC_1x16P_MMX 0
+;;     movu    m1, [r0+ 0]
+;;     movu    m2, [r0+ 8]
+;;     movu    m3, [r0+16]
+;;     movu    m4, [r0+24]
+;;     psubw   m1, [r2+ 0]
+;;     psubw   m2, [r2+ 8]
+;;     psubw   m3, [r2+16]
+;;     psubw   m4, [r2+24]
+;;     ABSW2   m1, m2, m1, m2, m5, m6
+;;     ABSW2   m3, m4, m3, m4, m7, m5
+;;     lea     r0, [r0+2*r1]
+;;     lea     r2, [r2+2*r3]
+;;     paddw   m1, m2
+;;     paddw   m3, m4
+;;     paddw   m0, m1
+;;     paddw   m0, m3
+;; %endmacro
 
-%macro SAD_INC_2x8P_MMX 0
-    movu    m1, [r0+0]
-    movu    m2, [r0+8]
-    movu    m3, [r0+2*r1+0]
-    movu    m4, [r0+2*r1+8]
-    psubw   m1, [r2+0]
-    psubw   m2, [r2+8]
-    psubw   m3, [r2+2*r3+0]
-    psubw   m4, [r2+2*r3+8]
-    ABSW2   m1, m2, m1, m2, m5, m6
-    ABSW2   m3, m4, m3, m4, m7, m5
-    lea     r0, [r0+4*r1]
-    lea     r2, [r2+4*r3]
-    paddw   m1, m2
-    paddw   m3, m4
-    paddw   m0, m1
-    paddw   m0, m3
-%endmacro
+;; %macro SAD_INC_2x8P_MMX 0
+;;     movu    m1, [r0+0]
+;;     movu    m2, [r0+8]
+;;     movu    m3, [r0+2*r1+0]
+;;     movu    m4, [r0+2*r1+8]
+;;     psubw   m1, [r2+0]
+;;     psubw   m2, [r2+8]
+;;     psubw   m3, [r2+2*r3+0]
+;;     psubw   m4, [r2+2*r3+8]
+;;     ABSW2   m1, m2, m1, m2, m5, m6
+;;     ABSW2   m3, m4, m3, m4, m7, m5
+;;     lea     r0, [r0+4*r1]
+;;     lea     r2, [r2+4*r3]
+;;     paddw   m1, m2
+;;     paddw   m3, m4
+;;     paddw   m0, m1
+;;     paddw   m0, m3
+;; %endmacro
 
-%macro SAD_INC_2x4P_MMX 0
-    movu    m1, [r0]
-    movu    m2, [r0+2*r1]
-    psubw   m1, [r2]
-    psubw   m2, [r2+2*r3]
-    ABSW2   m1, m2, m1, m2, m3, m4
-    lea     r0, [r0+4*r1]
-    lea     r2, [r2+4*r3]
-    paddw   m0, m1
-    paddw   m0, m2
-%endmacro
+;; %macro SAD_INC_2x4P_MMX 0
+;;     movu    m1, [r0]
+;;     movu    m2, [r0+2*r1]
+;;     psubw   m1, [r2]
+;;     psubw   m2, [r2+2*r3]
+;;     ABSW2   m1, m2, m1, m2, m3, m4
+;;     lea     r0, [r0+4*r1]
+;;     lea     r2, [r2+4*r3]
+;;     paddw   m0, m1
+;;     paddw   m0, m2
+;; %endmacro
 
-;----------------------------------------------------------------------------------
-; int  ff_pixelutils_sad16_NxM_mmxext(const uint16_t *src1, ptrdiff_t stride1,
-;                                     const uint16_t *src2, ptrdiff_t stride2);
-;----------------------------------------------------------------------------------
-%macro SAD16_MMX 3
-cglobal pixelutils_sad16_%1x%2, 4,5-(%2&4/4)
-    pxor    m0, m0
-%if %2 == 4
-    SAD_INC_%3x%1P_MMX
-    SAD_INC_%3x%1P_MMX
-%else
-    mov    r4d, %2/%3
-.loop:
-    SAD_INC_%3x%1P_MMX
-    dec    r4d
-    jg .loop
-%endif
-%if %1*%2 == 256
-    HADDUW  m0, m1
-%else
-    HADDW   m0, m1
-%endif
-    movd   eax, m0
-    RET
-%endmacro
+;; ;----------------------------------------------------------------------------------
+;; ; int  ff_pixelutils_sad16_NxM_{mmxext,ssse3}(const uint16_t *src1, ptrdiff_t stride1,
+;; ;                                     	      const uint16_t *src2, ptrdiff_t stride2);
+;; ;----------------------------------------------------------------------------------
+;; %macro SAD16_MMX 3
+;; cglobal pixelutils_sad16_%1x%2, 4,5-(%2&4/4)
+;;     pxor    m0, m0
+;; %if %2 == 4
+;;     SAD_INC_%3x%1P_MMX
+;;     SAD_INC_%3x%1P_MMX
+;; %else
+;;     mov    r4d, %2/%3
+;; .loop:
+;;     SAD_INC_%3x%1P_MMX
+;;     dec    r4d
+;;     jg .loop
+;; %endif
+;; %if %1*%2 == 256
+;;     HADDUW  m0, m1
+;; %else
+;;     HADDW   m0, m1
+;; %endif
+;;     movd   eax, m0
+;;     RET
+;; %endmacro
 
-INIT_MMX mmxext
-SAD16_MMX 16, 16, 1
-SAD16_MMX  8,  8, 2
-SAD16_MMX  4,  4, 2
-INIT_MMX ssse3
-SAD16_MMX  4,  4, 2
+;; INIT_MMX mmxext
+;; SAD16_MMX 16, 16, 1
+;; SAD16_MMX  8,  8, 2
+;; SAD16_MMX  4,  4, 2
+;; INIT_MMX ssse3
+;; SAD16_MMX  4,  4, 2
 
 ;=============================================================================
 ; SAD XMM
@@ -554,6 +552,17 @@ SAD16_MMX  4,  4, 2
 %endif
 %endmacro
 
+%macro HADDW2 2 ; reg, tmp
+%if cpuflag(xop) && sizeof%1 == 16
+    vphaddwq  %1, %1
+    movhlps   %2, %1
+    paddd     %1, %2
+%else
+    pmaddwd %1, [pw_x]
+    HADDD   %1, %2
+%endif
+%endmacro
+	
 ;---------------------------------------------------------------------------------------
 ; int  ff_pixelutils_sad16_NxM_{sse2,ssse3,avx2}(const uint16_t *src1, ptrdiff_t stride1,
 ;                                                const uint16_t *src2, ptrdiff_t stride2);
@@ -571,7 +580,7 @@ cglobal pixelutils_sad16_%1x%2, 4,5-(%2&4/4),8*(%1/mmsize)
     dec    r4d
     jg .loop
 %endif
-    HADDW   m0, m1
+    HADDW2   m0, m1
     movd   eax, xm0
     RET
 %endmacro
