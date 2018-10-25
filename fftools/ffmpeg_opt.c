@@ -110,6 +110,7 @@ float max_error_rate  = 2.0/3;
 int filter_nbthreads = 0;
 int filter_complex_nbthreads = 0;
 int vstats_version = 2;
+int abr_pipeline      = 0;
 
 
 static int intra_only         = 0;
@@ -3502,6 +3503,8 @@ const OptionDef options[] = {
         "set the maximum number of queued packets from the demuxer" },
     { "find_stream_info", OPT_BOOL | OPT_PERFILE | OPT_INPUT | OPT_EXPERT, { &find_stream_info },
         "read and decode the streams to fill missing information with heuristics" },
+    { "abr_pipeline",    OPT_BOOL,                                    { &abr_pipeline },
+        "adaptive bitrate pipeline (1 decode to N filter graphs" },
 
     /* video options */
     { "vframes",      OPT_VIDEO | HAS_ARG  | OPT_PERFILE | OPT_OUTPUT,           { .func_arg = opt_video_frames },
