@@ -1571,7 +1571,7 @@ static av_cold int vaapi_encode_init_slice_structure(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     }
 
-    if (ctx->nb_slices > avctx->slices) {
+    if (ctx->nb_slices < avctx->slices) {
         av_log(avctx, AV_LOG_WARNING, "Slice count rounded up to "
                "%d (from %d) due to driver constraints on slice "
                "structure.\n", ctx->nb_slices, avctx->slices);
