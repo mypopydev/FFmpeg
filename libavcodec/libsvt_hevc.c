@@ -48,7 +48,7 @@ typedef struct SvtParams {
     int rc_mode;
     int scd;
     int tune;
-	int qp;
+    int qp;
     int profile;
     int base_layer_switch_mode;
 }SvtParams;
@@ -64,9 +64,7 @@ static void free_buffer(SvtEncoder *svt_enc)
 {
     if (svt_enc->in_buf) {
         EB_H265_ENC_INPUT *in_data = (EB_H265_ENC_INPUT* )svt_enc->in_buf->pBuffer;
-        if (in_data) {
-            av_freep(&in_data);
-        }
+        av_freep(&in_data);
         av_freep(&svt_enc->in_buf);
     }
     av_freep(&svt_enc->out_buf);
@@ -140,8 +138,8 @@ static EB_ERRORTYPE config_enc_params(EB_H265_ENC_CONFIGURATION  *param, AVCodec
     param->sceneChangeDetection   = q->svt_param.scd;
     param->tune                   = q->svt_param.tune;
     param->baseLayerSwitchMode    = q->svt_param.base_layer_switch_mode;
-	param->qp                     = q->svt_param.qp;
-	param->intraPeriodLength      = q->svt_param.intra_period;
+    param->qp                     = q->svt_param.qp;
+    param->intraPeriodLength      = q->svt_param.intra_period;
 
     param->targetBitRate          = avctx->bit_rate;
     param->frameRateNumerator     = avctx->time_base.den;
@@ -164,7 +162,6 @@ static EB_ERRORTYPE config_enc_params(EB_H265_ENC_CONFIGURATION  *param, AVCodec
 
 static void read_in_data(EB_H265_ENC_CONFIGURATION *config, const AVFrame* frame, EB_BUFFERHEADERTYPE *headerPtr)
 {
-
     unsigned int is16bit = config->encoderBitDepth > 8;
     unsigned long long lumaReadSize = (unsigned long long)config->sourceWidth * config->sourceHeight<< is16bit;
     EB_H265_ENC_INPUT *in_data = (EB_H265_ENC_INPUT*)headerPtr->pBuffer;
@@ -173,11 +170,11 @@ static void read_in_data(EB_H265_ENC_CONFIGURATION *config, const AVFrame* frame
     in_data->luma = frame->data[0];
     in_data->cb   = frame->data[1];
     in_data->cr   = frame->data[2];
-	
-	// stride info
-	in_data->yStride  = frame->linesize[0] >> is16bit;
-	in_data->cbStride = frame->linesize[1] >> is16bit;
-	in_data->crStride = frame->linesize[2] >> is16bit;
+
+    // stride info
+    in_data->yStride  = frame->linesize[0] >> is16bit;
+    in_data->cbStride = frame->linesize[1] >> is16bit;
+    in_data->crStride = frame->linesize[2] >> is16bit;
 
     headerPtr->nFilledLen   += lumaReadSize * 3/2u;
 }
@@ -263,7 +260,7 @@ static int eb_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
         return ret;
     headerPtr->pBuffer = pkt->data;
     stream_status = EbH265GetPacket(svt_enc->svt_handle, headerPtr, q->eos_flag);
-    if ((stream_status == EB_NoErrorEmptyQueue))
+    if (stream_status == EB_NoErrorEmptyQueue)
         return AVERROR(EAGAIN);
 
     pkt->size = headerPtr->nFilledLen;
@@ -295,8 +292,8 @@ static const AVOption options[] = {
     {"enc_p", "Encoding preset [0,12] (for tune 0 and >=4k resolution), [0,10] (for >= 1080p resolution), [0,9] (for all resolution and modes)", OFFSET(svt_param.enc_mode), AV_OPT_TYPE_INT, { .i64 = 9 }, 0, 12, VE },
     {"profile", "Profile now support[1,2],Main Still Picture Profile not supported", OFFSET(svt_param.profile), AV_OPT_TYPE_INT, { .i64 = 2 }, 1, 2, VE },
     {"rc", "RC mode 0: CQP 1: VBR", OFFSET(svt_param.rc_mode), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
-	{"q", "QP value for intra frames", OFFSET(svt_param.qp), AV_OPT_TYPE_INT, { .i64 = 32 }, 0, 51, VE },
-	{"ip", "distance between intra frames", OFFSET(svt_param.intra_period), AV_OPT_TYPE_INT, { .i64 = -2 }, -2, 255, VE },
+    {"q", "QP value for intra frames", OFFSET(svt_param.qp), AV_OPT_TYPE_INT, { .i64 = 32 }, 0, 51, VE },
+    {"ip", "distance between intra frames", OFFSET(svt_param.intra_period), AV_OPT_TYPE_INT, { .i64 = -2 }, -2, 255, VE },
     {"scd", "scene change detection", OFFSET(svt_param.scd), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
     {"tune", "tune mode: SQ/OQ[0,1]", OFFSET(svt_param.tune), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
     {"bl_mode", "Random Access Prediction Structure Type", OFFSET(svt_param.base_layer_switch_mode), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
@@ -313,7 +310,7 @@ static const AVClass class = {
 static const AVCodecDefault eb_enc_defaults[] = {
     { "b",         "7M"    },
     { "refs",      "0"     },
-    { "g",         "90"   },
+    { "g",         "90"    },
     { "flags",     "+cgop" },
     { NULL },
 };
