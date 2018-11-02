@@ -58,6 +58,7 @@ typedef struct VAAPIEncodeH264Context {
     int sei;
     int profile;
     int level;
+    int mb_rate_control;
 
     // Derived settings.
     int mb_width;
@@ -889,6 +890,22 @@ static av_cold int vaapi_encode_h264_configure(AVCodecContext *avctx)
     return 0;
 }
 
+static av_cold int vaapi_encode_h264_bit_rate_control(AVCodecContext *avctx)
+{
+    VAAPIEncodeContext      *ctx = avctx->priv_data;
+    VAAPIEncodeH264Context *priv = avctx->priv_data;
+
+    if (priv->mb_rate_control) {
+ #if VA_CHECK_VERSION(0, 39, 2)
+        ctx->rc_params.rc.rc_flags.bits.mb_rate_control = priv->mb_rate_control;
+ #else
+        av_log(avctx, AV_LOG_WARNING, "The MB rate control option is not "
+               "supported with this VAAPI version.\n");
+ #endif
+    }
+    return 0;
+}
+
 static const VAAPIEncodeProfile vaapi_encode_h264_profiles[] = {
     { FF_PROFILE_H264_HIGH, 8, 3, 1, 1, VAProfileH264High },
     { FF_PROFILE_H264_MAIN, 8, 3, 1, 1, VAProfileH264Main },
@@ -903,6 +920,8 @@ static const VAAPIEncodeType vaapi_encode_type_h264 = {
     .flags                 = FLAG_SLICE_CONTROL,
 
     .configure             = &vaapi_encode_h264_configure,
+
+    .bit_rate_control      = &vaapi_encode_h264_bit_rate_control,
 
     .sequence_params_size  = sizeof(VAEncSequenceParameterBufferH264),
     .init_sequence_params  = &vaapi_encode_h264_init_sequence_params,
@@ -1001,6 +1020,8 @@ static const AVOption vaapi_encode_h264_options[] = {
       OFFSET(qp), AV_OPT_TYPE_INT, { .i64 = 20 }, 0, 52, FLAGS },
     { "quality", "Set encode quality (trades off against speed, higher is faster)",
       OFFSET(quality), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT_MAX, FLAGS },
+    { "mb_rate_control", "MB level bitrate control (only supported on GEN9+)",
+      OFFSET(mb_rate_control), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, FLAGS, "mb_rate_control" },
     { "coder", "Entropy coder type",
       OFFSET(coder), AV_OPT_TYPE_INT, { .i64 = 1 }, 0, 1, FLAGS, "coder" },
         { "cavlc", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 }, INT_MIN, INT_MAX, FLAGS, "coder" },
