@@ -59,6 +59,7 @@ typedef struct VAAPIEncodeH264Context {
     int profile;
     int level;
     int mb_rate_control;
+    int sliding_window;
 
     // Derived settings.
     int mb_width;
@@ -989,6 +990,15 @@ static av_cold int vaapi_encode_h264_init(AVCodecContext *avctx)
 #endif
     }
 
+    if (priv->sliding_window) {
+#if VA_CHECK_VERSION(1, 1, 0)
+            ctx->rc_params.rc.rc_flags.bits.frame_tolerance_mode = priv->sliding_window;
+#else
+            av_log(avctx, AV_LOG_WARNING, "The sliding window is not "
+                   "supported with this VAAPI version.\n");
+#endif
+    }
+
     return ff_vaapi_encode_init(avctx);
 }
 
@@ -1013,6 +1023,8 @@ static const AVOption vaapi_encode_h264_options[] = {
       OFFSET(quality), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, INT_MAX, FLAGS },
     { "mb_rate_control", "MB level bitrate control (only supported on GEN9+)",
       OFFSET(mb_rate_control), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, FLAGS, "mb_rate_control" },
+    { "sliding_window", "Use sliding window to reduce the instant bitrate fluctuations",
+      OFFSET(sliding_window), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, FLAGS, "sliding_window" },
     { "coder", "Entropy coder type",
       OFFSET(coder), AV_OPT_TYPE_INT, { .i64 = 1 }, 0, 1, FLAGS, "coder" },
         { "cavlc", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 }, INT_MIN, INT_MAX, FLAGS, "coder" },
