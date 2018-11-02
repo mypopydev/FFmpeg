@@ -1261,6 +1261,7 @@ static av_cold int vaapi_encode_init_rate_control(AVCodecContext *avctx)
     int fr_num, fr_den;
     VAConfigAttrib rc_attr = { VAConfigAttribRateControl };
     VAStatus vas;
+    int err;
 
     vas = vaGetConfigAttributes(ctx->hwctx->display,
                                 ctx->va_profile, ctx->va_entrypoint,
@@ -1412,6 +1413,14 @@ static av_cold int vaapi_encode_init_rate_control(AVCodecContext *avctx)
         .max_qp            = (avctx->qmax > 0 ? avctx->qmax : 0),
 #endif
     };
+    if (ctx->codec->bit_rate_control) {
+        err = ctx->codec->bit_rate_control(avctx);
+        if (err < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Codec specific bit rate control setting "
+                   "failed: %d.\n", err);
+            return err;
+        }
+    }
     vaapi_encode_add_global_param(avctx, &ctx->rc_params.misc,
                                   sizeof(ctx->rc_params));
 
