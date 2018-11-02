@@ -52,6 +52,7 @@ typedef struct VAAPIEncodeH265Context {
     int tier;
     int level;
     int sei;
+    int sliding_window;
 
     // Derived settings.
     int fixed_qp_idr;
@@ -1067,6 +1068,24 @@ static av_cold int vaapi_encode_h265_configure(AVCodecContext *avctx)
     return 0;
 }
 
+
+static av_cold int vaapi_encode_h265_bit_rate_control(AVCodecContext *avctx)
+{
+    VAAPIEncodeContext      *ctx = avctx->priv_data;
+    VAAPIEncodeH265Context *priv = avctx->priv_data;
+
+    if (priv->sliding_window) {
+#if VA_CHECK_VERSION(1, 1, 0)
+        ctx->rc_params.rc.rc_flags.bits.frame_tolerance_mode = priv->sliding_window;
+#else
+        av_log(avctx, AV_LOG_WARNING, "The sliding window is not "
+               "supported with this VAAPI version.\n");
+#endif
+    }
+
+    return 0;
+}
+
 static const VAAPIEncodeProfile vaapi_encode_h265_profiles[] = {
     { FF_PROFILE_HEVC_MAIN,     8, 3, 1, 1, VAProfileHEVCMain       },
     { FF_PROFILE_HEVC_REXT,     8, 3, 1, 1, VAProfileHEVCMain       },
@@ -1083,6 +1102,8 @@ static const VAAPIEncodeType vaapi_encode_type_h265 = {
     .flags                 = FLAG_SLICE_CONTROL,
 
     .configure             = &vaapi_encode_h265_configure,
+
+    .bit_rate_control      = &vaapi_encode_h265_bit_rate_control,
 
     .sequence_params_size  = sizeof(VAEncSequenceParameterBufferHEVC),
     .init_sequence_params  = &vaapi_encode_h265_init_sequence_params,
@@ -1150,6 +1171,9 @@ static const AVOption vaapi_encode_h265_options[] = {
 
     { "qp", "Constant QP (for P-frames; scaled by qfactor/qoffset for I/B)",
       OFFSET(qp), AV_OPT_TYPE_INT, { .i64 = 25 }, 0, 52, FLAGS },
+
+    { "sliding_window", "Use sliding window to reduce the instant bitrate fluctuations",
+      OFFSET(sliding_window), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, FLAGS, "sliding_window" },
 
     { "aud", "Include AUD",
       OFFSET(aud), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, FLAGS },
