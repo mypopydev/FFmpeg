@@ -268,6 +268,9 @@ typedef struct VAAPIEncodeType {
     // add any necessary global parameters).
     int (*configure)(AVCodecContext *avctx);
 
+    // Perform any extra codec-specific bit rate control configuration
+    int (*bit_rate_control)(AVCodecContext *avctx);
+
     // The size of the parameter structures:
     // sizeof(VAEnc{type}ParameterBuffer{codec}).
     size_t sequence_params_size;
