@@ -2620,6 +2620,10 @@ Each encoder also has its own specific options:
 @option{profile} sets the value of @emph{profile_idc} and the @emph{constraint_set*_flag}s.
 @option{level} sets the value of @emph{level_idc}.
 
+@option{mb_rate_control} enabled the macro block level bit rate control, that generally
+improves subjective visual quality. It may have a negative impact on performance and
+objective visual quality metrics. Default is off and can't compatible with Constant QP.
+
 @table @option
 @item coder
 Set entropy encoder (default is @emph{cabac}).  Possible values:
