@@ -2665,6 +2665,10 @@ Include recovery points where appropriate (@emph{recovery_point} messages).
 @option{profile} and @option{level} set the values of
 @emph{general_profile_idc} and @emph{general_level_idc} respectively.
 
+@option{sliding_window} enabled the sliding windows bit rate control, that is a feature to
+reduce the instant bitrate fluctuation, occasional big frame size for intra and scene
+change frames are allowed. And the fluctuation level can be controlled by max bit rate.
+
 @table @option
 @item aud
 Include access unit delimiters in the stream (not included by default).
