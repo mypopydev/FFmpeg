@@ -2624,6 +2624,10 @@ Each encoder also has its own specific options:
 improves subjective visual quality. It may have a negative impact on performance and
 objective visual quality metrics. Default is off and can't compatible with Constant QP.
 
+@option{sliding_window} enabled the sliding windows bit rate control, that is a feature to
+reduce the instant bitrate fluctuation, occasional big frame size for intra and scene
+change frames are allowed. And the fluctuation level can be controlled by max bit rate.
+
 @table @option
 @item coder
 Set entropy encoder (default is @emph{cabac}).  Possible values:
