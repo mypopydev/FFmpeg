@@ -1488,7 +1488,6 @@ static int reap_filters(int flush)
             }
             //if (ost->source_index >= 0)
             //    *filtered_frame= *input_streams[ost->source_index]->decoded_frame; //for me_threshold
-
             switch (av_buffersink_get_type(filter)) {
             case AVMEDIA_TYPE_VIDEO:
                 if (!ost->frame_aspect_ratio.num)
@@ -1818,7 +1817,7 @@ static void print_report(int is_last_report, int64_t timer_start, int64_t cur_ti
         } else
             av_log(NULL, AV_LOG_INFO, "%s    %c", buf.str, end);
 
-    fflush(stderr);
+        fflush(stderr);
     }
     av_bprint_finalize(&buf, NULL);
 
@@ -1925,46 +1924,46 @@ static void flush_encoders(void)
                 av_assert0(0);
             }
 
-                av_init_packet(&pkt);
-                pkt.data = NULL;
-                pkt.size = 0;
+            av_init_packet(&pkt);
+            pkt.data = NULL;
+            pkt.size = 0;
 
-                update_benchmark(NULL);
+            update_benchmark(NULL);
 
-                while ((ret = avcodec_receive_packet(enc, &pkt)) == AVERROR(EAGAIN)) {
-                    ret = avcodec_send_frame(enc, NULL);
-                    if (ret < 0) {
-                        av_log(NULL, AV_LOG_FATAL, "%s encoding failed: %s\n",
-                               desc,
-                               av_err2str(ret));
-                        exit_program(1);
-                    }
-                }
-
-                update_benchmark("flush_%s %d.%d", desc, ost->file_index, ost->index);
-                if (ret < 0 && ret != AVERROR_EOF) {
+            while ((ret = avcodec_receive_packet(enc, &pkt)) == AVERROR(EAGAIN)) {
+                ret = avcodec_send_frame(enc, NULL);
+                if (ret < 0) {
                     av_log(NULL, AV_LOG_FATAL, "%s encoding failed: %s\n",
                            desc,
                            av_err2str(ret));
                     exit_program(1);
                 }
-                if (ost->logfile && enc->stats_out) {
-                    fprintf(ost->logfile, "%s", enc->stats_out);
-                }
-                if (ret == AVERROR_EOF) {
-                    output_packet(of, &pkt, ost, 1);
-                    break;
-                }
-                if (ost->finished & MUXER_FINISHED) {
-                    av_packet_unref(&pkt);
-                    continue;
-                }
-                av_packet_rescale_ts(&pkt, enc->time_base, ost->mux_timebase);
-                pkt_size = pkt.size;
-                output_packet(of, &pkt, ost, 0);
-                if (ost->enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO && vstats_filename) {
-                    do_video_stats(ost, pkt_size);
-                }
+            }
+
+            update_benchmark("flush_%s %d.%d", desc, ost->file_index, ost->index);
+            if (ret < 0 && ret != AVERROR_EOF) {
+                av_log(NULL, AV_LOG_FATAL, "%s encoding failed: %s\n",
+                       desc,
+                       av_err2str(ret));
+                exit_program(1);
+            }
+            if (ost->logfile && enc->stats_out) {
+                fprintf(ost->logfile, "%s", enc->stats_out);
+            }
+            if (ret == AVERROR_EOF) {
+                output_packet(of, &pkt, ost, 1);
+                break;
+            }
+            if (ost->finished & MUXER_FINISHED) {
+                av_packet_unref(&pkt);
+                continue;
+            }
+            av_packet_rescale_ts(&pkt, enc->time_base, ost->mux_timebase);
+            pkt_size = pkt.size;
+            output_packet(of, &pkt, ost, 0);
+            if (ost->enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO && vstats_filename) {
+                do_video_stats(ost, pkt_size);
+            }
         }
     }
 }
