@@ -1066,6 +1066,8 @@ static void do_video_out(OutputFile *of,
     int frame_size = 0;
     InputStream *ist = NULL;
     AVFilterContext *filter = ost->filter->filter;
+    int forced_keyframe = 0;
+    double pts_time;
 
     if (ost->source_index >= 0)
         ist = input_streams[ost->source_index];
@@ -1213,10 +1215,6 @@ static void do_video_out(OutputFile *of,
     if (!check_recording_time(ost))
         return;
 
-    {
-        int forced_keyframe = 0;
-        double pts_time;
-
         if (enc->flags & (AV_CODEC_FLAG_INTERLACED_DCT | AV_CODEC_FLAG_INTERLACED_ME) &&
             ost->top_field_first >= 0)
             in_picture->top_field_first = !!ost->top_field_first;
@@ -1324,7 +1322,6 @@ static void do_video_out(OutputFile *of,
                 fprintf(ost->logfile, "%s", enc->stats_out);
             }
         }
-    }
     ost->sync_opts++;
     /*
      * For video, number of frames in == number of packets out.
