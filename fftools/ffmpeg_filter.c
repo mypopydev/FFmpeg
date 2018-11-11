@@ -197,6 +197,7 @@ DEF_CHOOSE_FORMAT(channel_layouts, uint64_t, channel_layout, channel_layouts, 0,
 int init_simple_filtergraph(InputStream *ist, OutputStream *ost)
 {
     FilterGraph *fg = av_mallocz(sizeof(*fg));
+    int i;
 
     if (!fg)
         exit_program(1);
@@ -225,6 +226,11 @@ int init_simple_filtergraph(InputStream *ist, OutputStream *ost)
     GROW_ARRAY(ist->filters, ist->nb_filters);
     ist->filters[ist->nb_filters - 1] = fg->inputs[0];
 
+    if (abr_pipeline) {
+        for (i = 0; i < ist->nb_filters; i++) {
+            ist->filters[i]->f_thread = 0;
+        }
+    }
     GROW_ARRAY(filtergraphs, nb_filtergraphs);
     filtergraphs[nb_filtergraphs - 1] = fg;
 

@@ -253,6 +253,17 @@ typedef struct InputFilter {
 
     AVBufferRef *hw_frames_ctx;
 
+    // for abr pipeline
+    AVFrame *waited_frm;
+    AVFrame input_frm;
+    pthread_t f_thread;
+    pthread_cond_t process_cond;
+    pthread_cond_t finish_cond;
+    pthread_mutex_t process_mutex;
+    pthread_mutex_t finish_mutex;
+    int t_end;
+    int t_error;
+
     int eof;
 } InputFilter;
 
@@ -606,6 +617,7 @@ extern int frame_bits_per_raw_sample;
 extern AVIOContext *progress_avio;
 extern float max_error_rate;
 extern char *videotoolbox_pixfmt;
+extern int abr_pipeline;
 
 extern int filter_nbthreads;
 extern int filter_complex_nbthreads;
