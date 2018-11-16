@@ -741,6 +741,21 @@ static AVFrame *do_blend(AVFilterContext *ctx, AVFrame *mainpic,
     return output;
 }
 
+static int blend_frame_for_dualinput(FFFrameSync *fs)
+{
+    AVFilterContext *ctx = fs->parent;
+    AVFrame *main, *overlay, *dst_buf;
+    int ret;
+
+    ret = ff_framesync_dualinput_get(fs, &main, &overlay);
+    if (ret < 0)
+        return ret;
+    if (!overlay)
+        return ff_filter_frame(ctx->outputs[0], main);
+    dst_buf = do_blend(ctx, main, overlay);
+    return ff_filter_frame(ctx->outputs[0], dst_buf);
+}
+
 static av_cold int overlay_vaapi_init(AVFilterContext *avctx)
 {
     OverlayVAAPIContext *ctx = avctx->priv;
@@ -771,6 +786,7 @@ static av_cold int overlay_vaapi_init(AVFilterContext *avctx)
     ctx->filter_buffer = VA_INVALID_ID;
 
     //ctx->fs.process = do_blend;
+    ctx->fs.on_event = blend_frame_for_dualinput;
     return 0;
 }
 
@@ -801,17 +817,9 @@ static const AVOption overlay_vaapi_options[] = {
     { "y", "set the y expression", OFFSET(y_expr), AV_OPT_TYPE_STRING, {.str = "0"}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "x0", "set the main video x expression", OFFSET(x0_expr), AV_OPT_TYPE_STRING, {.str = "0"}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "y0", "set the main video y expression", OFFSET(y0_expr), AV_OPT_TYPE_STRING, {.str = "0"}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { "eof_action", "Action to take when encountering EOF from secondary input ",
-        OFFSET(fs.opt_eof_action), AV_OPT_TYPE_INT, { .i64 = EOF_ACTION_REPEAT },
-        EOF_ACTION_REPEAT, EOF_ACTION_PASS, .flags = FLAGS, "eof_action" },
-        { "repeat", "Repeat the previous frame.",   0, AV_OPT_TYPE_CONST, { .i64 = EOF_ACTION_REPEAT }, .flags = FLAGS, "eof_action" },
-        { "endall", "End both streams.",            0, AV_OPT_TYPE_CONST, { .i64 = EOF_ACTION_ENDALL }, .flags = FLAGS, "eof_action" },
-        { "pass",   "Pass through the main input.", 0, AV_OPT_TYPE_CONST, { .i64 = EOF_ACTION_PASS },   .flags = FLAGS, "eof_action" },
     { "eval", "specify when to evaluate expressions", OFFSET(eval_mode), AV_OPT_TYPE_INT, {.i64 = EVAL_MODE_FRAME}, 0, EVAL_MODE_NB-1, FLAGS, "eval" },
          { "init",  "eval expressions once during initialization", 0, AV_OPT_TYPE_CONST, {.i64=EVAL_MODE_INIT},  .flags = FLAGS, .unit = "eval" },
          { "frame", "eval expressions per-frame",                  0, AV_OPT_TYPE_CONST, {.i64=EVAL_MODE_FRAME}, .flags = FLAGS, .unit = "eval" },
-    { "shortest", "force termination when the shortest input terminates", OFFSET(fs.opt_shortest), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, FLAGS },
-    { "repeatlast", "repeat overlay of the last overlay frame", OFFSET(fs.opt_repeatlast), AV_OPT_TYPE_BOOL, {.i64=1}, 0, 1, FLAGS },
     { "alpha", "overlay alpha blend value", OFFSET(alpha), AV_OPT_TYPE_FLOAT, {.dbl=1.0}, 0.0, 1.0, FLAGS },
     { "min_luma", "sensible value lower than max_luma", OFFSET(luma_min), AV_OPT_TYPE_FLOAT, {.dbl=0.0}, 0.0, 1.0, FLAGS },
     { "max_luma", "sensible value larger than min_luma", OFFSET(luma_max), AV_OPT_TYPE_FLOAT, {.dbl=1.0}, 0.0, 1.0, FLAGS },
@@ -848,7 +856,7 @@ static const AVFilterPad overlay_vaapi_outputs[] = {
 
 AVFilter ff_vf_overlay_vaapi = {
     .name          = "overlay_vaapi",
-    .description   = NULL_IF_CONFIG_SMALL("Overlay a video source on top of the input."),
+    .description   = NULL_IF_CONFIG_SMALL("Overlay a video source on top of the input use VAAPI."),
     .priv_size     = sizeof(OverlayVAAPIContext),
     .preinit       = overlay_vaapi_framesync_preinit,
     .init          = overlay_vaapi_init,
