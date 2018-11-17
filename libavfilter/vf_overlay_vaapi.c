@@ -116,9 +116,9 @@ typedef struct OverlayVAAPIContext {
     int eof_action;             ///< action to take on EOF from source
     int eval_mode;              ///< EvalMode
 
-    float alpha;                //overlay alpha channel
-    float luma_min;                //overlay luma key min
-    float luma_max;                //overlay luma key max
+    float alpha;                ///< overlay alpha channel
+    float luma_min;             ///< overlay luma key min
+    float luma_max;             ///< overlay luma key max
     AVExpr *x_pexpr, *y_pexpr;
     AVExpr *x0_pexpr, *y0_pexpr;
 
@@ -196,7 +196,7 @@ static int overlay_vaapi_process_command(AVFilterContext *ctx, const char *cmd, 
 
     if (s->eval_mode == EVAL_MODE_INIT) {
         eval_expr(ctx);
-        av_log(ctx, AV_LOG_VERBOSE, "x:%f xi:%d y:%f yi:%d, x0:%f x0i:%d y0i:%f yi:%d\n",
+        av_log(ctx, AV_LOG_VERBOSE, "(x:%f xi:%d y:%f yi:%d), (x0:%f x0i:%d y0i:%f yi:%d)\n",
                s->var_values[VAR_X], s->x,
                s->var_values[VAR_Y], s->y,
                s->var_values[VAR_X0], s->x0,
@@ -215,14 +215,14 @@ static int overlay_vaapi_query_formats(AVFilterContext *avctx)
 
     /* main and overlay */
     if (ret = ff_formats_ref(ff_make_format_list(pix_fmts),
-                            &avctx->inputs[0]->out_formats) < 0)
+                             &avctx->inputs[0]->out_formats) < 0)
         return ret;
     if (ret = ff_formats_ref(ff_make_format_list(pix_fmts),
                              &avctx->inputs[1]->out_formats) < 0)
         return ret;
 
     if (ret = ff_formats_ref(ff_make_format_list(pix_fmts),
-                       &avctx->outputs[0]->in_formats) < 0)
+                             &avctx->outputs[0]->in_formats) < 0)
         return ret;
 
     return 0;
@@ -314,9 +314,11 @@ static int overlay_vaapi_config_overlay(AVFilterLink *inlink)
 
     if (ctx->eval_mode == EVAL_MODE_INIT) {
         eval_expr(avctx);
-        av_log(avctx, AV_LOG_VERBOSE, "x:%f xi:%d y:%f yi:%d\n",
+        av_log(avctx, AV_LOG_VERBOSE, "(x:%f xi:%d y:%f yi:%d), (x0:%f x0i:%d y0:%f y0i:%d)\n",
                ctx->var_values[VAR_X], ctx->x,
-               ctx->var_values[VAR_Y], ctx->y);
+               ctx->var_values[VAR_Y], ctx->y,
+               ctx->var_values[VAR_X0], ctx->x0,
+               ctx->var_values[VAR_Y0], ctx->y0);
     }
 
     av_log(avctx, AV_LOG_VERBOSE,
@@ -713,10 +715,9 @@ static AVFrame *do_blend(AVFilterContext *ctx, AVFrame *mainpic,
 {
     OverlayVAAPIContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
-    AVFrame *output = NULL;
 
     if (s->eval_mode == EVAL_MODE_FRAME) {
-        int64_t pos = av_frame_get_pkt_pos(mainpic);
+        int64_t pos = mainpic->pkt_pos;
 
         s->var_values[VAR_N] = inlink->frame_count_out;
         s->var_values[VAR_T] = mainpic->pts == AV_NOPTS_VALUE ?
@@ -735,10 +736,7 @@ static AVFrame *do_blend(AVFilterContext *ctx, AVFrame *mainpic,
                s->var_values[VAR_Y], s->y);
     }
 
-    {
-        output = blend_image(ctx, mainpic, second, s->x, s->y);
-    }
-    return output;
+    return blend_image(ctx, mainpic, second, s->x, s->y);
 }
 
 static int blend_frame_for_dualinput(FFFrameSync *fs)
@@ -828,6 +826,12 @@ static const AVOption overlay_vaapi_options[] = {
 
 FRAMESYNC_DEFINE_CLASS(overlay_vaapi, OverlayVAAPIContext, fs);
 
+static int activate(AVFilterContext *ctx)
+{
+    OverlayVAAPIContext *s = ctx->priv;
+    return ff_framesync_activate(&s->fs);
+}
+
 static const AVFilterPad overlay_vaapi_inputs[] = {
     {
         .name         = "main",
@@ -863,7 +867,7 @@ AVFilter ff_vf_overlay_vaapi = {
     .uninit        = overlay_vaapi_uninit,
     .query_formats = overlay_vaapi_query_formats,
     .process_command = overlay_vaapi_process_command,
-    //.activate      = activate, // FIXME TODO
+    .activate      = activate, // FIXME TODO
     .inputs        = overlay_vaapi_inputs,
     .outputs       = overlay_vaapi_outputs,
     .priv_class    = &overlay_vaapi_class,
