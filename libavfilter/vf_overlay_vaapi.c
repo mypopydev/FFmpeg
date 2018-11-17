@@ -392,11 +392,11 @@ static int overlay_vaapi_config_output(AVFilterLink *outlink)
     }
 
     ctx->output_width =
-            (ctx->x0 + main_link->w) > (ctx->x + overlay_link->w) ?
-                    (ctx->x0 + main_link->w) : (ctx->x + overlay_link->w);
+        (ctx->x0 + main_link->w) > (ctx->x + overlay_link->w) ?
+        (ctx->x0 + main_link->w) : (ctx->x + overlay_link->w);
     ctx->output_height =
-            (ctx->y0 + main_link->h) > (ctx->y + overlay_link->h) ?
-                    (ctx->y0 + main_link->h) : (ctx->y + overlay_link->h);
+        (ctx->y0 + main_link->h) > (ctx->y + overlay_link->h) ?
+        (ctx->y0 + main_link->h) : (ctx->y + overlay_link->h);
     if (ctx->output_width  < constraints->min_width  ||
         ctx->output_height < constraints->min_height ||
         ctx->output_width  > constraints->max_width  ||
@@ -477,7 +477,7 @@ fail:
 #define MAX_OVERLAY_BUFFER 2
 #define MAIN_OVERLAY 0
 #define TOP_OVERLAY 1
-static AVFrame *blend_image(AVFilterContext *avctx, AVFrame *main, const AVFrame *overlay, int x, int y)
+static AVFrame *blend_image(AVFilterContext *avctx, AVFrame *main, const AVFrame *overlay)
 {
     AVFilterLink *inlink = avctx->inputs[0];
     OverlayVAAPIContext *ctx = avctx->priv;
@@ -607,10 +607,10 @@ static AVFrame *blend_image(AVFilterContext *avctx, AVFrame *main, const AVFrame
         //ARGB fmt use VAProcColorStardardNone as surface color stardard VPG DRIVER
         if (i == MAIN_OVERLAY)
             params[i].surface_color_standard = ctx->main_frames->sw_format == AV_PIX_FMT_NV12 ?
-                    VAProcColorStandardBT601 : VAProcColorStandardNone;
+                                               VAProcColorStandardBT601 : VAProcColorStandardNone;
         else
             params[i].surface_color_standard = ctx->overlay_frames->sw_format == AV_PIX_FMT_NV12 ?
-                    VAProcColorStandardBT601 : VAProcColorStandardNone;
+                                               VAProcColorStandardBT601 : VAProcColorStandardNone;
         params[i].output_region = (i == MAIN_OVERLAY ? &main_out_region : &overlay_out_region);
         params[i].output_background_color = 0x00000000;
         params[i].output_color_standard = VAProcColorStandardBT601;
@@ -718,7 +718,7 @@ static AVFrame *do_blend(AVFilterContext *ctx, AVFrame *mainpic,
                s->var_values[VAR_Y], s->y);
     }
 
-    return blend_image(ctx, mainpic, second, s->x, s->y);
+    return blend_image(ctx, mainpic, second);
 }
 
 static int blend_frame_for_dualinput(FFFrameSync *fs)
