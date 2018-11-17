@@ -474,23 +474,6 @@ fail:
     return err;
 }
 
-/*
-static int overlay_request_frame(AVFilterLink *outlink)
-{
-    OverlayVAAPIContext *s = outlink->src->priv;
-    return ff_dualinput_request_frame(&s->fs, outlink);
-}
-
-static int filter_frame(AVFilterLink *inlink, AVFrame *inpicref)
-{
-    OverlayVAAPIContext *s = inlink->dst->priv;
-    av_log(inlink->dst, AV_LOG_DEBUG, "Incoming frame (time:%s) from link #%d\n",
-           av_ts2timestr(inpicref->pts, &inlink->time_base), FF_INLINK_IDX(inlink));
-    return ff_dualinput_filter_frame(&s->fs, inlink, inpicref);
-}
-*/
-
-
 #define MAX_OVERLAY_BUFFER 2
 #define MAIN_OVERLAY 0
 #define TOP_OVERLAY 1
@@ -577,7 +560,7 @@ static AVFrame *blend_image(AVFilterContext *avctx, AVFrame *main, const AVFrame
     };
     //ARGB blend flags set zero because alpha value has mapped into surface
     blend_state.flags = ctx->overlay_frames->sw_format == AV_PIX_FMT_NV12 ?
-            VA_BLEND_LUMA_KEY | VA_BLEND_GLOBAL_ALPHA : 0;
+                        VA_BLEND_LUMA_KEY | VA_BLEND_GLOBAL_ALPHA : 0;
     blend_state.global_alpha = ctx->alpha;
     blend_state.min_luma = ctx->luma_min;
     blend_state.max_luma = ctx->luma_max;
@@ -709,7 +692,6 @@ fail:
     return NULL;
 }
 
-
 static AVFrame *do_blend(AVFilterContext *ctx, AVFrame *mainpic,
                          const AVFrame *second)
 {
@@ -783,7 +765,6 @@ static av_cold int overlay_vaapi_init(AVFilterContext *avctx)
     }
     ctx->filter_buffer = VA_INVALID_ID;
 
-    //ctx->fs.process = do_blend;
     ctx->fs.on_event = blend_frame_for_dualinput;
     return 0;
 }
@@ -836,24 +817,21 @@ static const AVFilterPad overlay_vaapi_inputs[] = {
     {
         .name         = "main",
         .type         = AVMEDIA_TYPE_VIDEO,
-        //.filter_frame = filter_frame,
         .config_props = overlay_vaapi_config_main,
     },
     {
         .name         = "overlay",
         .type         = AVMEDIA_TYPE_VIDEO,
         .config_props = overlay_vaapi_config_overlay,
-        //.filter_frame = filter_frame,
     },
     { NULL }
 };
 
 static const AVFilterPad overlay_vaapi_outputs[] = {
     {
-        .name = "default",
-        .type = AVMEDIA_TYPE_VIDEO,
+        .name         = "default",
+        .type         = AVMEDIA_TYPE_VIDEO,
         .config_props = overlay_vaapi_config_output,
-        //.request_frame = overlay_request_frame,
     },
     { NULL }
 };
