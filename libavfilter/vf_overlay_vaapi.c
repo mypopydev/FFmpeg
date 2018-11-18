@@ -502,7 +502,7 @@ static AVFrame *blend_image(AVFilterContext *avctx, AVFrame *main, const AVFrame
         return NULL;
 
     main_surface = (VASurfaceID)(uintptr_t)main->data[3];
-    av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for main overlay input.\n",
+    av_log(ctx, AV_LOG_DEBUG, "Using surface %#x for main input.\n",
            main_surface);
 
     overlay_surface = (VASurfaceID)(uintptr_t)overlay->data[3];
