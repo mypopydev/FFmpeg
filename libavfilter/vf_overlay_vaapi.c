@@ -113,7 +113,6 @@ typedef struct OverlayVAAPIContext {
     char *x_expr, *y_expr;
     char *x0_expr, *y0_expr;
 
-    int eof_action;             ///< action to take on EOF from source
     int eval_mode;              ///< EvalMode
 
     float alpha;                ///< overlay alpha channel
@@ -308,8 +307,8 @@ static int overlay_vaapi_config_overlay(AVFilterLink *inlink)
     if ((ret = set_expr(&ctx->x_pexpr,      ctx->x_expr,      "x",      avctx)) < 0 ||
         (ret = set_expr(&ctx->y_pexpr,      ctx->y_expr,      "y",      avctx)) < 0)
         return ret;
-    if ((ret = set_expr(&ctx->x0_pexpr,      ctx->x0_expr,      "x0",      avctx)) < 0 ||
-        (ret = set_expr(&ctx->y0_pexpr,      ctx->y0_expr,      "y0",      avctx)) < 0)
+    if ((ret = set_expr(&ctx->x0_pexpr,     ctx->x0_expr,      "x0",    avctx)) < 0 ||
+        (ret = set_expr(&ctx->y0_pexpr,     ctx->y0_expr,      "y0",    avctx)) < 0)
         return ret;
 
     if (ctx->eval_mode == EVAL_MODE_INIT) {
@@ -327,7 +326,7 @@ static int overlay_vaapi_config_overlay(AVFilterLink *inlink)
            av_get_pix_fmt_name(avctx->inputs[0]->format),
            avctx->inputs[1]->w, avctx->inputs[1]->h,
            av_get_pix_fmt_name(avctx->inputs[1]->format),
-           ctx->eof_action);
+           ctx->fs.opt_eof_action);
 
     return 0;
 }
@@ -755,14 +754,6 @@ static av_cold int overlay_vaapi_init(AVFilterContext *avctx)
         ctx->output_format = AV_PIX_FMT_NONE;
     }
 
-    if (!ctx->fs.opt_repeatlast || ctx->eof_action == EOF_ACTION_PASS) {
-        ctx->fs.opt_repeatlast = 0;
-        ctx->eof_action = EOF_ACTION_PASS;
-    }
-    if (ctx->fs.opt_shortest || ctx->eof_action == EOF_ACTION_ENDALL) {
-        ctx->fs.opt_shortest = 1;
-        ctx->eof_action = EOF_ACTION_ENDALL;
-    }
     ctx->filter_buffer = VA_INVALID_ID;
 
     ctx->fs.on_event = blend_frame_for_dualinput;
@@ -845,7 +836,7 @@ AVFilter ff_vf_overlay_vaapi = {
     .uninit        = overlay_vaapi_uninit,
     .query_formats = overlay_vaapi_query_formats,
     .process_command = overlay_vaapi_process_command,
-    .activate      = activate, // FIXME TODO
+    .activate      = activate,
     .inputs        = overlay_vaapi_inputs,
     .outputs       = overlay_vaapi_outputs,
     .priv_class    = &overlay_vaapi_class,
