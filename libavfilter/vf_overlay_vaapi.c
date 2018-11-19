@@ -51,6 +51,8 @@ static const char *const var_names[] = {
     "vsub",
     "x",
     "y",
+    "x0",
+    "y0",
     "n",            ///< number of frame
     "pos",          ///< position in the file
     "t",            ///< timestamp expressed in seconds
@@ -107,7 +109,7 @@ typedef struct OverlayVAAPIContext {
     FFFrameSync fs;
 
     int x, y;                   ///< position of overlaid picture
-    int x0, y0;
+    int x0, y0;                 ///< position of main picture
     int hsub, vsub;             ///< chroma subsampling values
     double var_values[VAR_VARS_NB];
     char *x_expr, *y_expr;
@@ -300,6 +302,8 @@ static int overlay_vaapi_config_overlay(AVFilterLink *inlink)
     ctx->var_values[VAR_VSUB]  = 1<<pix_desc->log2_chroma_h;
     ctx->var_values[VAR_X]     = NAN;
     ctx->var_values[VAR_Y]     = NAN;
+    ctx->var_values[VAR_X0]    = NAN;
+    ctx->var_values[VAR_Y0]    = NAN;
     ctx->var_values[VAR_N]     = 0;
     ctx->var_values[VAR_T]     = NAN;
     ctx->var_values[VAR_POS]   = NAN;
@@ -454,7 +458,7 @@ static int overlay_vaapi_config_output(AVFilterLink *outlink)
         goto fail;
     outlink->w = ctx->output_width;
     outlink->h = ctx->output_height;
-    outlink->time_base = avctx->inputs[0]->time_base; /* FIXME */
+    outlink->time_base = avctx->inputs[0]->time_base; /* FIXME: use main pic time_base */
 
     outlink->hw_frames_ctx = av_buffer_ref(ctx->output_frames_ref);
     if (!outlink->hw_frames_ctx) {
@@ -702,7 +706,7 @@ static AVFrame *do_blend(AVFilterContext *ctx, AVFrame *mainpic,
 
         s->var_values[VAR_N] = inlink->frame_count_out;
         s->var_values[VAR_T] = mainpic->pts == AV_NOPTS_VALUE ?
-            NAN : mainpic->pts * av_q2d(inlink->time_base);
+                               NAN : mainpic->pts * av_q2d(inlink->time_base);
         s->var_values[VAR_POS] = pos == -1 ? NAN : pos;
 
         s->var_values[VAR_OVERLAY_W] = s->var_values[VAR_OW] = second->width;
@@ -778,7 +782,6 @@ static av_cold void overlay_vaapi_uninit(AVFilterContext *avctx)
     av_expr_free(ctx->x0_pexpr); ctx->x0_pexpr = NULL;
     av_expr_free(ctx->y0_pexpr); ctx->y0_pexpr = NULL;
 }
-
 
 #define OFFSET(x) offsetof(OverlayVAAPIContext, x)
 #define FLAGS (AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM)
