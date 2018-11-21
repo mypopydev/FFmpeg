@@ -62,10 +62,8 @@ typedef struct SvtContext {
 static void free_buffer(SvtEncoder *svt_enc)
 {
     if (svt_enc->in_buf) {
-        EB_H265_ENC_INPUT *in_data = (EB_H265_ENC_INPUT* )svt_enc->in_buf->pBuffer;
-        if (in_data) {
-            av_freep(&in_data);
-        }
+        EB_H265_ENC_INPUT *in_data = (EB_H265_ENC_INPUT *)svt_enc->in_buf->pBuffer;
+        av_freep(&in_data);
         av_freep(&svt_enc->in_buf);
     }
     av_freep(&svt_enc->out_buf);
@@ -364,4 +362,3 @@ AVCodec ff_hevc_svt_encoder = {
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
     .wrapper_name   = "libsvt_hevc",
 };
-
