@@ -314,22 +314,22 @@ static av_cold int eb_enc_close(AVCodecContext *avctx)
 #define OFFSET(x) offsetof(SvtContext, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
-    {"vui", "Enable vui info", OFFSET(svt_param.vui_info), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
+    {"vui", "Enable vui info", OFFSET(svt_param.vui_info), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
     {"hielevel", "Hierarchical Prediction Levels [0,3]", OFFSET(svt_param.hierarchical_level), AV_OPT_TYPE_INT, { .i64 = 3 }, 0, 3, VE },
     {"la_depth", "Look Ahead Distance [0,256]", OFFSET(svt_param.la_depth), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 256, VE },
-    {"intra_ref_type", "Intra Refresh Type 0: No intra refresh1: CRA (Open GOP) 2: IDR", OFFSET(svt_param.intra_ref_type), AV_OPT_TYPE_INT, { .i64 = 1 }, 1, 2, VE },
+    {"intra_ref_type", "Intra Refresh Type 0: No intra refresh 1: CRA (Open GOP) 2: IDR", OFFSET(svt_param.intra_ref_type), AV_OPT_TYPE_INT, { .i64 = 1 }, 1, 2, VE },
     {"enc_p", "Encoding preset [0,12] (for tune 0 and >=4k resolution), [0,10] (for >= 1080p resolution), [0,9] (for all resolution and modes)", OFFSET(svt_param.enc_mode), AV_OPT_TYPE_INT, { .i64 = 9 }, 0, 12, VE },
-    {"profile", "Profile now support[1,2],Main Still Picture Profile not supported", OFFSET(svt_param.profile), AV_OPT_TYPE_INT, { .i64 = 2 }, 1, 2, VE },
+    {"profile", "Profile now support[1,2], Main Still Picture Profile not supported", OFFSET(svt_param.profile), AV_OPT_TYPE_INT, { .i64 = 2 }, 1, 2, VE },
     {"rc", "RC mode 0: CQP 1: VBR", OFFSET(svt_param.rc_mode), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
     {"q", "QP value for intra frames", OFFSET(svt_param.qp), AV_OPT_TYPE_INT, { .i64 = 32 }, 0, 51, VE },
-    {"scd", "scene change detection", OFFSET(svt_param.scd), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
-    {"tune", "tune mode: SQ/OQ[0,1]", OFFSET(svt_param.tune), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
-    {"bl_mode", "Random Access Prediction Structure Type", OFFSET(svt_param.base_layer_switch_mode), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
+    {"scd", "Scene change detection", OFFSET(svt_param.scd), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
+    {"tune", "Tune mode: SQ/OQ[0,1]", OFFSET(svt_param.tune), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
+    {"bl_mode", "Random Access Prediction Structure Type", OFFSET(svt_param.base_layer_switch_mode), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
     {NULL},
 };
 
 static const AVClass class = {
-    .class_name = "hevc_svt encoder",
+    .class_name = "libsvt_hevc",
     .item_name  = av_default_item_name,
     .option     = options,
     .version    = LIBAVUTIL_VERSION_INT,
