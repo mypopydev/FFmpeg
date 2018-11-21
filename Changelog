@@ -12,6 +12,7 @@ version <next>:
 - PCM-DVD encoder
 - GIF parser
 - vividas demuxer
+- add SVT(Scalable Video Technology) HEVC encoder
 
 
 version 4.1:
