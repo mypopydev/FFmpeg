@@ -7,7 +7,7 @@ version <next>:
 - dedot filter
 - chromashift and rgbashift filters
 - freezedetect filter
-
+- add SVT(Scalable Video Technology) HEVC encoder
 
 version 4.1:
 - deblock filter
