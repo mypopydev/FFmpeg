@@ -10,7 +10,7 @@ version <next>:
 - truehd_core bitstream filter
 - dhav demuxer
 - PCM-DVD encoder
-
+- add SVT(Scalable Video Technology) HEVC encoder
 
 version 4.1:
 - deblock filter
