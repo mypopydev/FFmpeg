@@ -938,6 +938,12 @@ typedef struct AVStream {
     AVRational avg_frame_rate;
 
     /**
+     * The max bitrate of the encoded data (in bits per second).
+     * - decoding: set by libavformat
+     */
+    int64_t rc_max_rate;
+
+    /**
      * For streams with AV_DISPOSITION_ATTACHED_PIC disposition, this packet
      * will contain the attached picture.
      *
