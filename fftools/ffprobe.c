@@ -2622,8 +2622,8 @@ static int show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_id
     print_time("duration",    stream->duration, &stream->time_base);
     if (par->bit_rate > 0)     print_val    ("bit_rate", par->bit_rate, unit_bit_per_second_str);
     else                       print_str_opt("bit_rate", "N/A");
-    if (dec_ctx && dec_ctx->rc_max_rate > 0) print_val ("max_bit_rate", dec_ctx->rc_max_rate, unit_bit_per_second_str);
-    else                                     print_str_opt("max_bit_rate", "N/A");
+    if (dec_ctx && dec_ctx->rc_max_rate >0) print_val    ("max_bit_rate", dec_ctx->rc_max_rate, unit_bit_per_second_str);
+    else                                    print_str_opt("max_bit_rate", "N/A");
     if (dec_ctx && dec_ctx->bits_per_raw_sample > 0) print_fmt("bits_per_raw_sample", "%d", dec_ctx->bits_per_raw_sample);
     else                                             print_str_opt("bits_per_raw_sample", "N/A");
     if (stream->nb_frames) print_fmt    ("nb_frames", "%"PRId64, stream->nb_frames);
@@ -2913,6 +2913,7 @@ static int open_input_file(InputFile *ifile, const char *filename)
 
             ist->dec_ctx->pkt_timebase = stream->time_base;
             ist->dec_ctx->framerate = stream->avg_frame_rate;
+            ist->dec_ctx->rc_max_rate = stream->rc_max_rate;
 #if FF_API_LAVF_AVCTX
             ist->dec_ctx->coded_width = stream->codec->coded_width;
             ist->dec_ctx->coded_height = stream->codec->coded_height;
