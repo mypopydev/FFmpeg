@@ -15,6 +15,9 @@ libavutil:     2017-10-21
 
 API changes, most recent first:
 
+2018-11-xx - xxxxxxxxxx - lavf 58.23.100 - avformat.h
+  Add rc_max_rate to AVStream
+
 -------- 8< --------- FFmpeg 4.1 was cut here -------- 8< ---------
 
 2018-10-27 - 718044dc19 - lavu 56.21.100 - pixdesc.h
