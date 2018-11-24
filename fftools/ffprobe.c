@@ -2464,6 +2464,7 @@ static int show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_id
     const AVCodecDescriptor *cd;
     int ret = 0;
     const char *profile = NULL;
+    AVCPBProperties *props = NULL;
 
     av_bprint_init(&pbuf, 1, AV_BPRINT_SIZE_UNLIMITED);
 
@@ -2611,6 +2612,10 @@ static int show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_id
         }
     }
 
+    props = (AVCPBProperties *) av_stream_get_side_data(stream,
+                                                        AV_PKT_DATA_CPB_PROPERTIES,
+                                                        NULL);
+
     if (fmt_ctx->iformat->flags & AVFMT_SHOW_IDS) print_fmt    ("id", "0x%x", stream->id);
     else                                          print_str_opt("id", "N/A");
     print_q("r_frame_rate",   stream->r_frame_rate,   '/');
@@ -2622,10 +2627,8 @@ static int show_stream(WriterContext *w, AVFormatContext *fmt_ctx, int stream_id
     print_time("duration",    stream->duration, &stream->time_base);
     if (par->bit_rate > 0)     print_val    ("bit_rate", par->bit_rate, unit_bit_per_second_str);
     else                       print_str_opt("bit_rate", "N/A");
-#if FF_API_LAVF_AVCTX
-    if (stream->codec->rc_max_rate > 0) print_val ("max_bit_rate", stream->codec->rc_max_rate, unit_bit_per_second_str);
-    else                                print_str_opt("max_bit_rate", "N/A");
-#endif
+    if (props && props->max_bitrate > 0) print_val    ("max_bit_rate", props->max_bitrate, unit_bit_per_second_str);
+    else                                 print_str_opt("max_bit_rate", "N/A");
     if (dec_ctx && dec_ctx->bits_per_raw_sample > 0) print_fmt("bits_per_raw_sample", "%d", dec_ctx->bits_per_raw_sample);
     else                                             print_str_opt("bits_per_raw_sample", "N/A");
     if (stream->nb_frames) print_fmt    ("nb_frames", "%"PRId64, stream->nb_frames);
