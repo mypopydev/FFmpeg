@@ -508,18 +508,23 @@ int ff_mp4_read_dec_config_descr(AVFormatContext *fc, AVStream *st, AVIOContext 
     int len, tag;
     int ret;
     int object_type_id = avio_r8(pb);
+    AVCPBProperties *props = NULL;
+
     avio_r8(pb); /* stream type */
     avio_rb24(pb); /* buffer size db */
 
     v = avio_rb32(pb);
 
-    // TODO: fix this with codecpar
-#if FF_API_LAVF_AVCTX
-FF_DISABLE_DEPRECATION_WARNINGS
-    if (v < INT32_MAX)
-        st->codec->rc_max_rate = v;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
+    if (v < INT32_MAX) {
+        props = (AVCPBProperties *)av_stream_new_side_data(
+            st,
+            AV_PKT_DATA_CPB_PROPERTIES,
+            sizeof(*props));
+        if (!props)
+            return AVERROR(ENOMEM);
+        memset(props, 0, sizeof(*props));
+        props->max_bitrate = v; /* max bitrate */
+    }
 
     st->codecpar->bit_rate = avio_rb32(pb); /* avg bitrate */
 

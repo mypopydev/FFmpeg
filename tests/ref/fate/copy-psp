@@ -1,4 +1,4 @@
-65a177552e03123c9a62ddb942970d05 *tests/data/fate/copy-psp.psp
+3bc37a07647197c6fbd55a3585f532ab *tests/data/fate/copy-psp.psp
 2041445 tests/data/fate/copy-psp.psp
 #extradata 0:       51, 0xaf6d1012
 #extradata 1:        2, 0x00b200a1
@@ -14,7 +14,7 @@
 #channel_layout 1: 3
 #channel_layout_name 1: stereo
 0,          0,          0,     3003,    37084, 0x021a0d3f
-1,          0,          0,     1024,       10, 0x0e270398
+1,          0,          0,     1024,       10, 0x0e270398, S=1,       24, 0x163600f1
 1,       1024,       1024,     1025,       10, 0x0f4703b8
 0,       3003,       3003,     3003,     6925, 0x011b3822, F=0x0
 1,       2049,       2049,     1023,      334, 0x2675a55f
