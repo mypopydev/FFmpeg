@@ -98,17 +98,29 @@ static EB_ERRORTYPE alloc_buffer(EB_H265_ENC_CONFIGURATION *config, SvtEncoder *
 
 failed:
     free_buffer(svt_enc);
-    return AVERROR(ENOMEM);
+    return EB_ErrorInsufficientResources;
 }
 
 static int error_mapping(int val)
 {
-    if (val == EB_ErrorInsufficientResources)
-        return AVERROR(ENOMEM);
-    if ((val == EB_ErrorUndefined) || (val == EB_ErrorInvalidComponent) ||
-        (val == EB_ErrorBadParameter))
-        return AVERROR(EINVAL);
-    return AVERROR_EXTERNAL;
+    int err;
+
+    switch (val) {
+    case EB_ErrorInsufficientResources:
+        err = AVERROR(ENOMEM);
+        break;
+
+    case EB_ErrorUndefined:
+    case EB_ErrorInvalidComponent:
+    case EB_ErrorBadParameter:
+        err = AVERROR(EINVAL);
+        break;
+
+    default:
+        err = AVERROR_EXTERNAL;
+    }
+
+    return err;
 }
 
 static EB_ERRORTYPE config_enc_params(EB_H265_ENC_CONFIGURATION *param, AVCodecContext *avctx)
@@ -147,6 +159,7 @@ static EB_ERRORTYPE config_enc_params(EB_H265_ENC_CONFIGURATION *param, AVCodecC
 
     if (q->svt_param.vui_info)
         param->videoUsabilityInfo = q->svt_param.vui_info;
+
     if (q->svt_param.la_depth != -1)
         param->lookAheadDistance  = q->svt_param.la_depth;
 
@@ -217,38 +230,46 @@ static av_cold int eb_enc_init(AVCodecContext *avctx)
     }
 
     if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER) {
-
         EB_BUFFERHEADERTYPE headerPtr;
         headerPtr.nSize       = sizeof(EB_BUFFERHEADERTYPE);
         headerPtr.nFilledLen  = 0;
         headerPtr.pBuffer     = av_malloc(10 * 1024 * 1024);
         headerPtr.nAllocLen   = (10 * 1024 * 1024);
 
-        if (!headerPtr.pBuffer)
-            return AVERROR(ENOMEM);
+        if (!headerPtr.pBuffer) {
+            av_log(avctx, AV_LOG_ERROR,
+                   "Cannot allocate buffer size %d.\n", headerPtr.nAllocLen);
+            ret = EB_ErrorInsufficientResources;
+            goto failed_init_enc;
+        }
 
         ret = EbH265EncStreamHeader(svt_enc->svt_handle, &headerPtr);
         if (ret != EB_ErrorNone) {
+            av_log(avctx, AV_LOG_ERROR, "Error when build stream header.\n");
             av_freep(&headerPtr.pBuffer);
-            goto failed_init;
+            goto failed_init_enc;
         }
+
         avctx->extradata_size = headerPtr.nFilledLen;
         avctx->extradata = av_malloc(avctx->extradata_size + AV_INPUT_BUFFER_PADDING_SIZE);
         if (!avctx->extradata) {
             av_log(avctx, AV_LOG_ERROR,
                    "Cannot allocate HEVC header of size %d.\n", avctx->extradata_size);
             av_freep(&headerPtr.pBuffer);
-            return AVERROR(ENOMEM);
+            ret = EB_ErrorInsufficientResources;
+            goto failed_init_enc;
         }
         memcpy(avctx->extradata, headerPtr.pBuffer, avctx->extradata_size);
+
         av_freep(&headerPtr.pBuffer);
     }
+
     return 0;
 
+failed_init_enc:
+    EbDeinitEncoder(svt_enc->svt_handle);
 failed_init_handle:
     EbDeinitHandle(svt_enc->svt_handle);
-failed_init:
-    EbDeinitEncoder(svt_enc->svt_handle);
 failed:
     return error_mapping(ret);
 }
@@ -348,7 +369,7 @@ static const AVOption options[] = {
         { "none", "No intra refresh", 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "intra_ref_type" },
         { "cra",  "CRA (Open GOP)",   0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "intra_ref_type" },
         { "idr",  "IDR",              0, AV_OPT_TYPE_CONST, { .i64 = 2 },  INT_MIN, INT_MAX, VE, "intra_ref_type" },
-    {"perset", "Encoding preset [0, 12] (for tune 0 and >=4k resolution), [0, 10] (for >= 1080p resolution), [0, 9] (for all resolution and modes)",
+    {"perset", "Encoding preset [0, 12] (e,g, for subjective quality tuning mode and >=4k resolution), [0, 10] (for >= 1080p resolution), [0, 9] (for all resolution and modes)",
      OFFSET(svt_param.enc_mode), AV_OPT_TYPE_INT, { .i64 = 9 }, 0, 12, VE },
     {"profile", "Profile setting, Main Still Picture Profile not supported", OFFSET(svt_param.profile),
      AV_OPT_TYPE_INT, { .i64 = 2 }, 1, 2, VE, "profile"},
