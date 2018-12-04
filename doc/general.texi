@@ -191,6 +191,14 @@ constrained baseline profile and CABAC.) Using it is mostly useful for
 testing and for taking advantage of Cisco's patent portfolio license
 (@url{http://www.openh264.org/BINARY_LICENSE.txt}).
 
+@section SVT-HEVC
+
+FFmpeg can make use of the SVT-HEVC library for HEVC encoding.
+
+Go to @url{https://github.com/intel/SVT-HEVC.git} and follow the instructions
+for installing the library. Then pass @code{--enable-libsvt} to configure to
+enable it.
+
 @section x264
 
 FFmpeg can make use of the x264 library for H.264 encoding.
