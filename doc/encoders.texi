@@ -1566,6 +1566,104 @@ Set maximum NAL size in bytes.
 Allow skipping frames to hit the target bitrate if set to 1.
 @end table
 
+@section libsvt_hevc
+
+Intel Scalable Video Technology HEVC encoder wrapper.
+
+This encoder requires the presence of the headers and
+library during configuration. You need to explicitly configure the
+build with @code{--enable-libsvt}. The library is detected using
+@command{pkg-config}.
+
+For more information about the library see
+@url{https://github.com/intel/SVT-HEVC.git}.
+
+@subsection Options
+
+The following FFmpeg global options affect the configurations of the
+libsvt_hevc encoder.
+
+@table @option
+@item vui
+Enables or disables the vui structure in the HEVC elementary
+bitstream. 0 = Off, 1 = On
+
+@item hielevel
+Set hierarchical levels. Can assume one of the following possible values:
+
+@table @samp
+@item flat
+none hierarchy level
+@item 2level
+2-level hierarchy
+@item 3level
+3-level hierarchy
+@item 4level
+4-level hierarchy
+@end table
+
+@item la_depth
+Set look-ahead depth, depending on bit rate control mode @option{rc}, When
+bit rate control mode is set to vbr it's best to set this parameter to be
+equal to the Intra period value (such is the default set by the encoder),
+when cqp is chosen, then a look ahead is recommended.
+
+@item intra_ref_type
+Set intra refesh type. Can assume one of the following possible values:
+
+@table @samp
+@item cra
+open group of pictures
+@item idr
+closed group of pictures
+@end table
+
+@item preset
+A preset defining the quality vs density tradeoff point that the
+encoding is to be performed at.(e.g. 0 is the highest quality mode,
+12 is the highest density mode).
+
+@item profile (@emph{profile})
+Set profile restrictions. Can assume one of the following possible values:
+
+@table @samp
+@item main
+main profile
+@item main10
+main10 profile
+@end table
+
+@item rc
+Set bit rate control mode. Can assume one of the following possible values:
+
+@table @samp
+@item cqp
+cqp mode
+@item vbr
+vbr mode
+@end table
+
+@item qp
+Initial quantization parameter for the intra pictures used when
+@option{rc} is cqp mode.
+
+@item sc_detection
+Enables or disables the scene change detection algorithm.
+
+@item tune
+Set quality mode. Can assume one of the following possible values:
+
+@table @samp
+@item sq
+subjective quality mode
+@item oq
+objective quality mode
+@end table
+
+@item bl_mode
+Enables or disables Random Access Prediction.
+@end table
+
 @section libtheora
 
 libtheora Theora encoder wrapper.
