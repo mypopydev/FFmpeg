@@ -171,8 +171,11 @@ static EB_ERRORTYPE config_enc_params(EB_H265_ENC_CONFIGURATION *param,
     param->intraPeriodLength      = avctx->gop_size-1;
     param->frameRateNumerator     = avctx->time_base.den;
     param->frameRateDenominator   = avctx->time_base.num * avctx->ticks_per_frame;
-    param->maxQpAllowed           = avctx->qmax;
-    param->minQpAllowed           = avctx->qmin;
+
+    if (param->rateControlMode) {
+        param->maxQpAllowed       = avctx->qmax;
+        param->minQpAllowed       = avctx->qmin;
+    }
 
     param->codeVpsSpsPps          = 0;
 
