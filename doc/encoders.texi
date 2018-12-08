@@ -1591,11 +1591,39 @@ Set the bitrate (as a number of bits per second). Default is 7M.
 Number of reference frames each P-frame can use. The range is from @var{0-16}.
 Default is 0(disabled).
 
-@item g
+@item g  / @option{gop_size}
 Set the GOP size. Default is 64.
 
 @item flags +cgop
 Enable closed GOP.
+
+@item qmin (@emph{min-q})
+Defaults 10
+
+@item qmax (@emph{max-q})
+Defaults 48
+
+Set minimum/maximum quantisation values.  Valid range is from 0 to 51
+(Only used when bit rate control mode @option{rc} is set to 1(cqp) mode.
+Has to be qmax > = qmin).
+
+@item profile (@emph{profile})
+Set profile restrictions. Can assume one of the following possible values:
+
+Default is 2 (main10).
+
+@table @samp
+@item main
+main profile
+@item main10
+main10 profile
+@end table
+
+@item level
+
+@option{profile} sets the value of @emph{profile_idc} and the @emph{constraint_set*_flag}s.
+@option{level} sets the value of @emph{level_idc}.
+
 @end table
 
 The encoder also has its own specific options:
@@ -1604,6 +1632,9 @@ The encoder also has its own specific options:
 @item vui
 Enables or disables the vui structure in the HEVC elementary
 bitstream. 0 = Off, 1 = On. Default is 0 (Off).
+
+@item aud (@emph{aud})
+Enable use of access unit delimiters when set to 1. Default is 0 (Off).
 
 @item hielevel
 Set hierarchical levels. Can assume one of the following possible values:
@@ -1644,16 +1675,17 @@ A preset defining the quality vs density tradeoff point that the
 encoding is to be performed at.(e.g. 0 is the highest quality mode,
 12 is the highest density mode). The range is from @var{0-12}. Default is 9.
 
-@item profile (@emph{profile})
-Set profile restrictions. Can assume one of the following possible values:
+@item tier
+Set @emph{general_tier_flag}.  This may affect the level chosen for the stream
+if it is not explicitly specified. Can assume one of the following possible values:
 
-Default is 2 (main10).
+Default is 1 (main).
 
 @table @samp
 @item main
-main profile
-@item main10
-main10 profile
+main tier
+@item high
+high tier
 @end table
 
 @item rc
