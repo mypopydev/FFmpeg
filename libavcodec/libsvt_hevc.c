@@ -47,7 +47,13 @@ typedef struct SvtParams {
     int scd;
     int tune;
     int qp;
+
+    int aud;
+
     int profile;
+    int tier;
+    int level;
+
     int base_layer_switch_mode;
 }SvtParams;
 
@@ -152,16 +158,21 @@ static EB_ERRORTYPE config_enc_params(EB_H265_ENC_CONFIGURATION *param,
     param->encMode                = q->svt_param.enc_mode;
     param->intraRefreshType       = q->svt_param.intra_ref_type;
     param->profile                = q->svt_param.profile;
+    param->tier                   = q->svt_param.tier;
+    param->level                  = q->svt_param.level;
     param->rateControlMode        = q->svt_param.rc_mode;
     param->sceneChangeDetection   = q->svt_param.scd;
     param->tune                   = q->svt_param.tune;
     param->baseLayerSwitchMode    = q->svt_param.base_layer_switch_mode;
     param->qp                     = q->svt_param.qp;
+    param->accessUnitDelimiter    = q->svt_param.aud;
 
     param->targetBitRate          = avctx->bit_rate;
     param->intraPeriodLength      = avctx->gop_size-1;
     param->frameRateNumerator     = avctx->time_base.den;
     param->frameRateDenominator   = avctx->time_base.num * avctx->ticks_per_frame;
+    param->maxQpAllowed           = avctx->qmax;
+    param->minQpAllowed           = avctx->qmin;
 
     param->codeVpsSpsPps          = 0;
 
@@ -367,40 +378,87 @@ static av_cold int eb_enc_close(AVCodecContext *avctx)
 #define OFFSET(x) offsetof(SvtContext, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
-    {"vui", "Enable vui info", OFFSET(svt_param.vui_info),
-     AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
-    {"hielevel", "Hierarchical prediction levels setting", OFFSET(svt_param.hierarchical_level),
-     AV_OPT_TYPE_INT, { .i64 = 3 }, 0, 3, VE , "hielevel"},
+    { "vui", "Enable vui info", OFFSET(svt_param.vui_info),
+      AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
+
+    { "aud", "Include AUD", OFFSET(svt_param.aud),
+      AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
+
+    { "hielevel", "Hierarchical prediction levels setting", OFFSET(svt_param.hierarchical_level),
+      AV_OPT_TYPE_INT, { .i64 = 3 }, 0, 3, VE , "hielevel"},
         { "flat",   NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "hielevel" },
         { "2level", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "hielevel" },
         { "3level", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 2 },  INT_MIN, INT_MAX, VE, "hielevel" },
         { "4level", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 3 },  INT_MIN, INT_MAX, VE, "hielevel" },
-    {"la_depth", "Look ahead distance [0, 256]", OFFSET(svt_param.la_depth),
-     AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 256, VE },
-    {"intra_ref_type", "Intra refresh type", OFFSET(svt_param.intra_ref_type),
-     AV_OPT_TYPE_INT, { .i64 = 2 }, 0, 2, VE , "intra_ref_type"},
+
+    { "la_depth", "Look ahead distance [0, 256]", OFFSET(svt_param.la_depth),
+      AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 256, VE },
+
+    { "intra_ref_type", "Intra refresh type", OFFSET(svt_param.intra_ref_type),
+      AV_OPT_TYPE_INT, { .i64 = 2 }, 0, 2, VE , "intra_ref_type"},
         { "none", "No intra refresh", 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "intra_ref_type" },
         { "cra",  "CRA (Open GOP)",   0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "intra_ref_type" },
         { "idr",  "IDR",              0, AV_OPT_TYPE_CONST, { .i64 = 2 },  INT_MIN, INT_MAX, VE, "intra_ref_type" },
-    {"preset", "Encoding preset [0, 12] (e,g, for subjective quality tuning mode and >=4k resolution), [0, 10] (for >= 1080p resolution), [0, 9] (for all resolution and modes)",
-     OFFSET(svt_param.enc_mode), AV_OPT_TYPE_INT, { .i64 = 9 }, 0, 12, VE },
-    {"profile", "Profile setting, Main Still Picture Profile not supported", OFFSET(svt_param.profile),
-     AV_OPT_TYPE_INT, { .i64 = 2 }, 1, 2, VE, "profile"},
-        { "main",   NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "profile" },
-        { "main10", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 2 },  INT_MIN, INT_MAX, VE, "profile" },
-    {"rc", "Bit rate control mode", OFFSET(svt_param.rc_mode),
-     AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE , "rc"},
+    { "preset", "Encoding preset [0, 12] (e,g, for subjective quality tuning mode and >=4k resolution), [0, 10] (for >= 1080p resolution), [0, 9] (for all resolution and modes)",
+      OFFSET(svt_param.enc_mode), AV_OPT_TYPE_INT, { .i64 = 9 }, 0, 12, VE },
+
+    { "profile", "Profile setting, Main Still Picture Profile not supported", OFFSET(svt_param.profile),
+      AV_OPT_TYPE_INT, { .i64 = FF_PROFILE_HEVC_MAIN_10 }, FF_PROFILE_HEVC_MAIN, FF_PROFILE_HEVC_MAIN_10, VE, "profile"},
+#define PROFILE(name, value)  name, NULL, 0, AV_OPT_TYPE_CONST, \
+    { .i64 = value }, 0, 0, VE, "profile"
+        { PROFILE("main",   FF_PROFILE_HEVC_MAIN)    },
+        { PROFILE("main10", FF_PROFILE_HEVC_MAIN_10) },
+#undef PROFILE
+
+    { "tier", "Set tier (general_tier_flag)", OFFSET(svt_param.tier),
+      AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE, "tier" },
+        { "main", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 }, 0, 0, VE, "tier" },
+        { "high", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 }, 0, 0, VE, "tier" },
+
+    { "level", "Set level (level_idc)", OFFSET(svt_param.level),
+      AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 0xff, VE, "level" },
+
+#define LEVEL(name, value) name, NULL, 0, AV_OPT_TYPE_CONST, \
+      { .i64 = value }, 0, 0, VE, "level"
+        { LEVEL("1",   10) },
+        { LEVEL("1.1", 11) },
+        { LEVEL("1.2", 12) },
+        { LEVEL("1.3", 13) },
+        { LEVEL("2",   20) },
+        { LEVEL("2.1", 21) },
+        { LEVEL("2.2", 22) },
+        { LEVEL("3",   30) },
+        { LEVEL("3.1", 31) },
+        { LEVEL("3.2", 32) },
+        { LEVEL("4",   40) },
+        { LEVEL("4.1", 41) },
+        { LEVEL("4.2", 42) },
+        { LEVEL("5",   50) },
+        { LEVEL("5.1", 51) },
+        { LEVEL("5.2", 52) },
+        { LEVEL("6",   60) },
+        { LEVEL("6.1", 61) },
+        { LEVEL("6.2", 62) },
+#undef LEVEL
+
+    { "rc", "Bit rate control mode", OFFSET(svt_param.rc_mode),
+      AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE , "rc"},
         { "cqp", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "rc" },
         { "vbr", NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "rc" },
-    {"qp", "QP value for intra frames", OFFSET(svt_param.qp),
-     AV_OPT_TYPE_INT, { .i64 = 32 }, 0, 51, VE },
-    {"sc_detection", "Scene change detection", OFFSET(svt_param.scd),
-     AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
-    {"tune", "Tune mode", OFFSET(svt_param.tune), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE, "tune" },
-        { "sq", "subjective quality mode", 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "tune" },
-        { "oq", "objective quality mode",  0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "tune" },
-    {"bl_mode", "Random Access Prediction Structure type setting", OFFSET(svt_param.base_layer_switch_mode),
-     AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
+
+    { "qp", "QP value for intra frames", OFFSET(svt_param.qp),
+      AV_OPT_TYPE_INT, { .i64 = 32 }, 0, 51, VE },
+
+    { "sc_detection", "Scene change detection", OFFSET(svt_param.scd),
+      AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
+
+    { "tune", "Tune mode", OFFSET(svt_param.tune), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE, "tune" },
+        { "sq", "Subjective quality mode", 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "tune" },
+        { "oq", "Objective quality mode",  0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "tune" },
+
+    { "bl_mode", "Random Access Prediction Structure type setting", OFFSET(svt_param.base_layer_switch_mode),
+      AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
+
     {NULL},
 };
 
@@ -416,6 +474,8 @@ static const AVCodecDefault eb_enc_defaults[] = {
     { "refs",      "0"     },
     { "g",         "64"    },
     { "flags",     "+cgop" },
+    { "qmin",      "10"    },
+    { "qmax",      "48"    },
     { NULL },
 };
 
