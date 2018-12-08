@@ -1708,15 +1708,15 @@ Initial quantization parameter for the intra pictures used when
 Enables or disables the scene change detection algorithm. Default is 0 (disable).
 
 @item tune
-Set quality mode. Can assume one of the following possible values:
+Set quality tuning mode. Can assume one of the following possible values:
 
-Default is 0 (sq).
+Default is 1 (objective).
 
 @table @samp
-@item sq
+@item subjective
 Subjective quality mode
-@item oq
-Objective quality mode
+@item objective
+Objective quality mode for PSNR / SSIM / VMAF benchmarking
 @end table
 
 @item bl_mode
