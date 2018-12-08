@@ -407,6 +407,7 @@ static const AVOption options[] = {
 
     { "profile", "Profile setting, Main Still Picture Profile not supported", OFFSET(svt_param.profile),
       AV_OPT_TYPE_INT, { .i64 = FF_PROFILE_HEVC_MAIN_10 }, FF_PROFILE_HEVC_MAIN, FF_PROFILE_HEVC_MAIN_10, VE, "profile"},
+
 #define PROFILE(name, value)  name, NULL, 0, AV_OPT_TYPE_CONST, \
     { .i64 = value }, 0, 0, VE, "profile"
         { PROFILE("main",   FF_PROFILE_HEVC_MAIN)    },
@@ -455,9 +456,11 @@ static const AVOption options[] = {
     { "sc_detection", "Scene change detection", OFFSET(svt_param.scd),
       AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
 
-    { "tune", "Tune mode", OFFSET(svt_param.tune), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE, "tune" },
-        { "sq", "Subjective quality mode", 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "tune" },
-        { "oq", "Objective quality mode",  0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "tune" },
+    { "tune", "Quality tuning mode", OFFSET(svt_param.tune), AV_OPT_TYPE_INT, { .i64 = 1 }, 0, 1, VE, "tune" },
+        { "subjective", "Subjective quality mode", 0,
+          AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "tune" },
+        { "objective",  "Objective quality mode for PSNR / SSIM / VMAF benchmarking",  0,
+          AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "tune" },
 
     { "bl_mode", "Random Access Prediction Structure type setting", OFFSET(svt_param.base_layer_switch_mode),
       AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
