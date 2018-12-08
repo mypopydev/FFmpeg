@@ -126,6 +126,20 @@ The dispatcher is open source and can be downloaded from
 with the @code{--enable-libmfx} option and @code{pkg-config} needs to be able to
 locate the dispatcher's @code{.pc} files.
 
+@section Intel SVT-HEVC
+
+FFmpeg can make use of the SVT-HEVC library for HEVC encoding.
+
+Go to @url{https://github.com/intel/SVT-HEVC.git} and follow the instructions
+for installing the library. Then pass @code{--enable-libsvt} to configure to
+enable it.
+
+@float NOTE
+Intel SVT_HEVC encoder is under the BSD-2-Clause Plus Patent License
+(see @url{https://spdx.org/licenses/BSD-2-Clause-Patent.html} for
+details), you must upgrade FFmpeg's license to GPL in order to use it.
+@end float
+
 @section Kvazaar
 
 FFmpeg can make use of the Kvazaar library for HEVC encoding.
