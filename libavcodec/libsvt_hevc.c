@@ -31,17 +31,15 @@
 #include "internal.h"
 #include "avcodec.h"
 
-typedef struct SvtEncoder {
-    EB_H265_ENC_CONFIGURATION           enc_params;
-    EB_COMPONENTTYPE                    *svt_handle;
-    EB_BUFFERHEADERTYPE                 *in_buf;
-    EB_BUFFERHEADERTYPE                 *out_buf;
-    int                                 raw_size;
-} SvtEncoder;
-
 typedef struct SvtContext {
     AVClass     *class;
-    SvtEncoder  *svt_enc;
+
+    EB_H265_ENC_CONFIGURATION  enc_params;
+    EB_COMPONENTTYPE           *svt_handle;
+
+    EB_BUFFERHEADERTYPE        *in_buf;
+    EB_BUFFERHEADERTYPE        *out_buf;
+    int                         raw_size;
 
     int         eos_flag;
 
@@ -65,7 +63,7 @@ typedef struct SvtContext {
     int base_layer_switch_mode;
 } SvtContext;
 
-static void free_buffer(SvtEncoder *svt_enc)
+static void free_buffer(SvtContext *svt_enc)
 {
     if (svt_enc->in_buf) {
         EB_H265_ENC_INPUT *in_data = (EB_H265_ENC_INPUT *)svt_enc->in_buf->pBuffer;
@@ -75,7 +73,7 @@ static void free_buffer(SvtEncoder *svt_enc)
     av_freep(&svt_enc->out_buf);
 }
 
-static EB_ERRORTYPE alloc_buffer(EB_H265_ENC_CONFIGURATION *config, SvtEncoder *svt_enc)
+static EB_ERRORTYPE alloc_buffer(EB_H265_ENC_CONFIGURATION *config, SvtContext *svt_enc)
 {
     const int    pack_mode_10bit   =
         (config->encoderBitDepth > 8) && (config->compressedTenBitFormat == 0) ? 1 : 0;
@@ -83,6 +81,8 @@ static EB_ERRORTYPE alloc_buffer(EB_H265_ENC_CONFIGURATION *config, SvtEncoder *
         config->sourceWidth * config->sourceHeight * (1 << pack_mode_10bit);
     const size_t luma_size_10bit   =
         (config->encoderBitDepth > 8 && pack_mode_10bit == 0) ? luma_size_8bit : 0;
+
+    EB_H265_ENC_INPUT *in_data;
 
     svt_enc->raw_size = (luma_size_8bit + luma_size_10bit) * 3 / 2;
 
@@ -92,7 +92,8 @@ static EB_ERRORTYPE alloc_buffer(EB_H265_ENC_CONFIGURATION *config, SvtEncoder *
     if (!svt_enc->in_buf || !svt_enc->out_buf)
         goto failed;
 
-    svt_enc->in_buf->pBuffer  = av_mallocz(sizeof(*svt_enc->in_buf->pBuffer));
+    in_data  = av_mallocz(sizeof(*in_data));
+    svt_enc->in_buf->pBuffer  = in_data;
     if (!svt_enc->in_buf->pBuffer)
         goto failed;
 
@@ -139,7 +140,7 @@ static EB_ERRORTYPE config_enc_params(EB_H265_ENC_CONFIGURATION *param,
                                       AVCodecContext *avctx)
 {
     SvtContext *q       = avctx->priv_data;
-    SvtEncoder *svt_enc = q->svt_enc;
+    SvtContext *svt_enc = q;
     EB_ERRORTYPE    ret = EB_ErrorNone;
     int        ten_bits = 0;
 
@@ -175,8 +176,14 @@ static EB_ERRORTYPE config_enc_params(EB_H265_ENC_CONFIGURATION *param,
 
     param->targetBitRate          = avctx->bit_rate;
     param->intraPeriodLength      = avctx->gop_size - 1;
-    param->frameRateNumerator     = avctx->time_base.den;
-    param->frameRateDenominator   = avctx->time_base.num * avctx->ticks_per_frame;
+
+    if (avctx->framerate.num > 0 && avctx->framerate.den > 0) {
+        param->frameRateNumerator     = avctx->framerate.num;
+        param->frameRateDenominator   = avctx->framerate.den * avctx->ticks_per_frame;
+    } else {
+        param->frameRateNumerator     = avctx->time_base.den;
+        param->frameRateDenominator   = avctx->time_base.num * avctx->ticks_per_frame;
+    }
 
     if (param->rateControlMode) {
         param->maxQpAllowed       = avctx->qmax;
@@ -225,14 +232,10 @@ static void read_in_data(EB_H265_ENC_CONFIGURATION *config,
 static av_cold int eb_enc_init(AVCodecContext *avctx)
 {
     SvtContext   *q = avctx->priv_data;
-    SvtEncoder   *svt_enc = NULL;
+    SvtContext   *svt_enc = NULL;
     EB_ERRORTYPE ret;
 
-    q->svt_enc  = av_mallocz(sizeof(*q->svt_enc));
-    if (!q->svt_enc)
-        return AVERROR(ENOMEM);
-
-    svt_enc = q->svt_enc;
+    svt_enc = q;
 
     q->eos_flag = 0;
 
@@ -308,7 +311,7 @@ failed:
 static int eb_send_frame(AVCodecContext *avctx, const AVFrame *frame)
 {
     SvtContext           *q = avctx->priv_data;
-    SvtEncoder           *svt_enc = q->svt_enc;
+    SvtContext            *svt_enc = q;
     EB_BUFFERHEADERTYPE  *headerPtr = svt_enc->in_buf;
 
     if (!frame) {
@@ -342,7 +345,7 @@ static int eb_send_frame(AVCodecContext *avctx, const AVFrame *frame)
 static int eb_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
 {
     SvtContext  *q = avctx->priv_data;
-    SvtEncoder  *svt_enc = q->svt_enc;
+    SvtContext  *svt_enc = q;
     EB_BUFFERHEADERTYPE   *headerPtr = svt_enc->out_buf;
     EB_ERRORTYPE          stream_status;
     int ret;
@@ -371,13 +374,12 @@ static int eb_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
 static av_cold int eb_enc_close(AVCodecContext *avctx)
 {
     SvtContext *q = avctx->priv_data;
-    SvtEncoder   *svt_enc = q->svt_enc;
+    SvtContext *svt_enc = q;
 
     EbDeinitEncoder(svt_enc->svt_handle);
     EbDeinitHandle(svt_enc->svt_handle);
 
     free_buffer(svt_enc);
-    av_freep(&svt_enc);
 
     return 0;
 }
