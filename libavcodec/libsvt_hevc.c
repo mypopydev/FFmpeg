@@ -63,6 +63,44 @@ typedef struct SvtContext {
     int base_layer_switch_mode;
 } SvtContext;
 
+static int error_mapping(EB_ERRORTYPE svt_ret)
+{
+    int err;
+
+    switch (svt_ret) {
+    case EB_ErrorInsufficientResources:
+        err = AVERROR(ENOMEM);
+        break;
+
+    case EB_ErrorUndefined:
+    case EB_ErrorInvalidComponent:
+    case EB_ErrorBadParameter:
+        err = AVERROR(EINVAL);
+        break;
+
+    case EB_ErrorDestroyThreadFailed:
+    case EB_ErrorSemaphoreUnresponsive:
+    case EB_ErrorDestroySemaphoreFailed:
+    case EB_ErrorCreateMutexFailed:
+    case EB_ErrorMutexUnresponsive:
+    case EB_ErrorDestroyMutexFailed:
+        err = AVERROR_EXTERNAL;
+            break;
+
+    case EB_NoErrorEmptyQueue:
+        err = AVERROR(EAGAIN);
+
+    case EB_ErrorNone:
+        err = 0;
+        break;
+
+    default:
+        err = AVERROR_UNKNOWN;
+    }
+
+    return err;
+}
+
 static void free_buffer(SvtContext *svt_enc)
 {
     if (svt_enc->in_buf) {
@@ -73,7 +111,7 @@ static void free_buffer(SvtContext *svt_enc)
     av_freep(&svt_enc->out_buf);
 }
 
-static EB_ERRORTYPE alloc_buffer(EB_H265_ENC_CONFIGURATION *config, SvtContext *svt_enc)
+static int alloc_buffer(EB_H265_ENC_CONFIGURATION *config, SvtContext *svt_enc)
 {
     const int    pack_mode_10bit   =
         (config->encoderBitDepth > 8) && (config->compressedTenBitFormat == 0) ? 1 : 0;
@@ -93,9 +131,9 @@ static EB_ERRORTYPE alloc_buffer(EB_H265_ENC_CONFIGURATION *config, SvtContext *
         goto failed;
 
     in_data  = av_mallocz(sizeof(*in_data));
-    svt_enc->in_buf->pBuffer  = in_data;
-    if (!svt_enc->in_buf->pBuffer)
+    if (!in_data)
         goto failed;
+    svt_enc->in_buf->pBuffer  = (unsigned char *)in_data;
 
     svt_enc->in_buf->nSize        = sizeof(*svt_enc->in_buf);
     svt_enc->in_buf->pAppPrivate  = NULL;
@@ -103,45 +141,18 @@ static EB_ERRORTYPE alloc_buffer(EB_H265_ENC_CONFIGURATION *config, SvtContext *
     svt_enc->out_buf->nAllocLen   = svt_enc->raw_size;
     svt_enc->out_buf->pAppPrivate = NULL;
 
-    return EB_ErrorNone;
+    return 0;
 
 failed:
     free_buffer(svt_enc);
-    return EB_ErrorInsufficientResources;
+    return AVERROR(ENOMEM);
 }
 
-static int error_mapping(int val)
-{
-    int err;
-
-    switch (val) {
-    case EB_ErrorInsufficientResources:
-        err = AVERROR(ENOMEM);
-        break;
-
-    case EB_ErrorUndefined:
-    case EB_ErrorInvalidComponent:
-    case EB_ErrorBadParameter:
-        err = AVERROR(EINVAL);
-        break;
-
-    case EB_NoErrorEmptyQueue:
-        err = AVERROR(EAGAIN);
-        break;
-
-    default:
-        err = AVERROR_EXTERNAL;
-    }
-
-    return err;
-}
-
-static EB_ERRORTYPE config_enc_params(EB_H265_ENC_CONFIGURATION *param,
+static int config_enc_params(EB_H265_ENC_CONFIGURATION *param,
                                       AVCodecContext *avctx)
 {
-    SvtContext *q       = avctx->priv_data;
-    SvtContext *svt_enc = q;
-    EB_ERRORTYPE    ret = EB_ErrorNone;
+    SvtContext *svt_enc = avctx->priv_data;
+    int             ret;
     int        ten_bits = 0;
 
     param->sourceWidth     = avctx->width;
@@ -161,18 +172,18 @@ static EB_ERRORTYPE config_enc_params(EB_H265_ENC_CONFIGURATION *param,
     }
 
     // Update param from options
-    param->hierarchicalLevels     = q->hierarchical_level - 1;
-    param->encMode                = q->enc_mode;
-    param->intraRefreshType       = q->intra_ref_type;
-    param->profile                = q->profile;
-    param->tier                   = q->tier;
-    param->level                  = q->level;
-    param->rateControlMode        = q->rc_mode;
-    param->sceneChangeDetection   = q->scd;
-    param->tune                   = q->tune;
-    param->baseLayerSwitchMode    = q->base_layer_switch_mode;
-    param->qp                     = q->qp;
-    param->accessUnitDelimiter    = q->aud;
+    param->hierarchicalLevels     = svt_enc->hierarchical_level - 1;
+    param->encMode                = svt_enc->enc_mode;
+    param->intraRefreshType       = svt_enc->intra_ref_type;
+    param->profile                = svt_enc->profile;
+    param->tier                   = svt_enc->tier;
+    param->level                  = svt_enc->level;
+    param->rateControlMode        = svt_enc->rc_mode;
+    param->sceneChangeDetection   = svt_enc->scd;
+    param->tune                   = svt_enc->tune;
+    param->baseLayerSwitchMode    = svt_enc->base_layer_switch_mode;
+    param->qp                     = svt_enc->qp;
+    param->accessUnitDelimiter    = svt_enc->aud;
 
     param->targetBitRate          = avctx->bit_rate;
     param->intraPeriodLength      = avctx->gop_size - 1;
@@ -192,11 +203,11 @@ static EB_ERRORTYPE config_enc_params(EB_H265_ENC_CONFIGURATION *param,
 
     param->codeVpsSpsPps          = 0;
 
-    if (q->vui_info)
-        param->videoUsabilityInfo = q->vui_info;
+    if (svt_enc->vui_info)
+        param->videoUsabilityInfo = svt_enc->vui_info;
 
-    if (q->la_depth != -1)
-        param->lookAheadDistance  = q->la_depth;
+    if (svt_enc->la_depth != -1)
+        param->lookAheadDistance  = svt_enc->la_depth;
 
     if (ten_bits) {
         param->encoderBitDepth        = 10;
@@ -231,34 +242,31 @@ static void read_in_data(EB_H265_ENC_CONFIGURATION *config,
 
 static av_cold int eb_enc_init(AVCodecContext *avctx)
 {
-    SvtContext   *q = avctx->priv_data;
-    SvtContext   *svt_enc = NULL;
-    EB_ERRORTYPE ret;
+    SvtContext   *svt_enc = avctx->priv_data;
+    EB_ERRORTYPE svt_ret;
 
-    svt_enc = q;
+    svt_enc->eos_flag = 0;
 
-    q->eos_flag = 0;
-
-    ret = EbInitHandle(&svt_enc->svt_handle, q, &svt_enc->enc_params);
-    if (ret != EB_ErrorNone) {
+    svt_ret = EbInitHandle(&svt_enc->svt_handle, svt_enc, &svt_enc->enc_params);
+    if (svt_ret != EB_ErrorNone) {
         av_log(avctx, AV_LOG_ERROR, "Error init encoder handle\n");
         goto failed;
     }
 
-    ret = config_enc_params(&svt_enc->enc_params, avctx);
-    if (ret != EB_ErrorNone) {
+    svt_ret = config_enc_params(&svt_enc->enc_params, avctx);
+    if (svt_ret != EB_ErrorNone) {
         av_log(avctx, AV_LOG_ERROR, "Error configure encoder parameters\n");
         goto failed_init_handle;
     }
 
-    ret = EbH265EncSetParameter(svt_enc->svt_handle, &svt_enc->enc_params);
-    if (ret != EB_ErrorNone) {
+    svt_ret = EbH265EncSetParameter(svt_enc->svt_handle, &svt_enc->enc_params);
+    if (svt_ret != EB_ErrorNone) {
         av_log(avctx, AV_LOG_ERROR, "Error setting encoder parameters\n");
         goto failed_init_handle;
     }
 
-    ret = EbInitEncoder(svt_enc->svt_handle);
-    if (ret != EB_ErrorNone) {
+    svt_ret = EbInitEncoder(svt_enc->svt_handle);
+    if (svt_ret != EB_ErrorNone) {
         av_log(avctx, AV_LOG_ERROR, "Error init encoder\n");
         goto failed_init_handle;
     }
@@ -273,12 +281,12 @@ static av_cold int eb_enc_init(AVCodecContext *avctx)
         if (!headerPtr.pBuffer) {
             av_log(avctx, AV_LOG_ERROR,
                    "Cannot allocate buffer size %d.\n", headerPtr.nAllocLen);
-            ret = EB_ErrorInsufficientResources;
+            svt_ret = EB_ErrorInsufficientResources;
             goto failed_init_enc;
         }
 
-        ret = EbH265EncStreamHeader(svt_enc->svt_handle, &headerPtr);
-        if (ret != EB_ErrorNone) {
+        svt_ret = EbH265EncStreamHeader(svt_enc->svt_handle, &headerPtr);
+        if (svt_ret != EB_ErrorNone) {
             av_log(avctx, AV_LOG_ERROR, "Error when build stream header.\n");
             av_freep(&headerPtr.pBuffer);
             goto failed_init_enc;
@@ -290,7 +298,7 @@ static av_cold int eb_enc_init(AVCodecContext *avctx)
             av_log(avctx, AV_LOG_ERROR,
                    "Cannot allocate HEVC header of size %d.\n", avctx->extradata_size);
             av_freep(&headerPtr.pBuffer);
-            ret = EB_ErrorInsufficientResources;
+            svt_ret = EB_ErrorInsufficientResources;
             goto failed_init_enc;
         }
         memcpy(avctx->extradata, headerPtr.pBuffer, avctx->extradata_size);
@@ -305,13 +313,12 @@ failed_init_enc:
 failed_init_handle:
     EbDeinitHandle(svt_enc->svt_handle);
 failed:
-    return error_mapping(ret);
+    return error_mapping(svt_ret);
 }
 
 static int eb_send_frame(AVCodecContext *avctx, const AVFrame *frame)
 {
-    SvtContext           *q = avctx->priv_data;
-    SvtContext            *svt_enc = q;
+    SvtContext           *svt_enc = avctx->priv_data;
     EB_BUFFERHEADERTYPE  *headerPtr = svt_enc->in_buf;
 
     if (!frame) {
@@ -325,7 +332,7 @@ static int eb_send_frame(AVCodecContext *avctx, const AVFrame *frame)
         headerPtrLast.nFlags      = EB_BUFFERFLAG_EOS;
 
         EbH265EncSendPicture(svt_enc->svt_handle, &headerPtrLast);
-        q->eos_flag = 1;
+        svt_enc->eos_flag = 1;
         av_log(avctx, AV_LOG_DEBUG, "Finish sending frames!!!\n");
         return 0;
     }
@@ -344,10 +351,9 @@ static int eb_send_frame(AVCodecContext *avctx, const AVFrame *frame)
 
 static int eb_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
 {
-    SvtContext  *q = avctx->priv_data;
-    SvtContext  *svt_enc = q;
+    SvtContext  *svt_enc = avctx->priv_data;
     EB_BUFFERHEADERTYPE   *headerPtr = svt_enc->out_buf;
-    EB_ERRORTYPE          stream_status;
+    EB_ERRORTYPE          svt_ret;
     int ret;
 
     if ((ret = ff_alloc_packet2(avctx, pkt, svt_enc->raw_size, 0)) < 0) {
@@ -355,8 +361,8 @@ static int eb_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
         return ret;
     }
     headerPtr->pBuffer = pkt->data;
-    stream_status = EbH265GetPacket(svt_enc->svt_handle, headerPtr, q->eos_flag);
-    if (stream_status == EB_NoErrorEmptyQueue)
+    svt_ret = EbH265GetPacket(svt_enc->svt_handle, headerPtr, svt_enc->eos_flag);
+    if (svt_ret == EB_NoErrorEmptyQueue)
         return AVERROR(EAGAIN);
 
     pkt->size = headerPtr->nFilledLen;
@@ -373,8 +379,7 @@ static int eb_receive_packet(AVCodecContext *avctx, AVPacket *pkt)
 
 static av_cold int eb_enc_close(AVCodecContext *avctx)
 {
-    SvtContext *q = avctx->priv_data;
-    SvtContext *svt_enc = q;
+    SvtContext *svt_enc = avctx->priv_data;
 
     EbDeinitEncoder(svt_enc->svt_handle);
     EbDeinitHandle(svt_enc->svt_handle);
