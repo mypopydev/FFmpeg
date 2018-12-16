@@ -53,6 +53,8 @@ typedef struct SvtContext {
     int tune;
     int qp;
 
+    int forced_idr;
+
     int aud;
 
     int profile;
@@ -148,7 +150,7 @@ failed:
 }
 
 static int config_enc_params(EB_H265_ENC_CONFIGURATION *param,
-                                      AVCodecContext *avctx)
+                             AVCodecContext *avctx)
 {
     SvtContext *svt_enc = avctx->priv_data;
     int             ret;
@@ -275,7 +277,7 @@ static av_cold int eb_enc_init(AVCodecContext *avctx)
     if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER) {
         EB_BUFFERHEADERTYPE headerPtr;
         headerPtr.nSize       = sizeof(headerPtr);
-        headerPtr.nFilledLen  = 0;
+        headerPtr.nFilledLen  = 0; /* in/out */
         headerPtr.pBuffer     = av_malloc(10 * 1024 * 1024);
         headerPtr.nAllocLen   = (10 * 1024 * 1024);
 
@@ -342,7 +344,20 @@ static int eb_send_frame(AVCodecContext *avctx, const AVFrame *frame)
     headerPtr->nFlags       = 0;
     headerPtr->pAppPrivate  = NULL;
     headerPtr->pts          = frame->pts;
-    headerPtr->sliceType    = INVALID_SLICE;
+    switch (frame->pict_type) {
+    case AV_PICTURE_TYPE_I:
+        headerPtr->sliceType = svt_enc->forced_idr > 0 ? IDR_SLICE : I_SLICE;
+        break;
+    case AV_PICTURE_TYPE_P:
+        headerPtr->sliceType = P_SLICE;
+        break;
+    case AV_PICTURE_TYPE_B:
+        headerPtr->sliceType = B_SLICE;
+        break;
+    default:
+        headerPtr->sliceType = INVALID_SLICE;
+        break;
+    }
     EbH265EncSendPicture(svt_enc->svt_handle, headerPtr);
 
     return 0;
@@ -464,6 +479,9 @@ static const AVOption options[] = {
     { "bl_mode", "Random Access Prediction Structure type setting", OFFSET(base_layer_switch_mode),
       AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
 
+    { "forced-idr", "If forcing keyframes, force them as IDR frames.", OFFSET(forced_idr),
+      AV_OPT_TYPE_BOOL,   { .i64 = 0 }, -1, 1, VE },
+
     {NULL},
 };
 
@@ -476,7 +494,6 @@ static const AVClass class = {
 
 static const AVCodecDefault eb_enc_defaults[] = {
     { "b",         "7M"    },
-    { "refs",      "0"     },
     { "g",         "64"    },
     { "flags",     "+cgop" },
     { "qmin",      "10"    },
