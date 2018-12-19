@@ -204,7 +204,11 @@ static int config_enc_params(EB_H265_ENC_CONFIGURATION *param,
     param->intraRefreshType       =
         !!(avctx->flags & AV_CODEC_FLAG_CLOSED_GOP) + 1;
 
-    param->codeVpsSpsPps          = 0;
+    // is it repeat headers for MP4 or Annex-b
+    if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER)
+        param->codeVpsSpsPps          = 0;
+    else
+        param->codeVpsSpsPps          = 1;
 
     if (svt_enc->vui_info)
         param->videoUsabilityInfo = svt_enc->vui_info;
@@ -316,6 +320,7 @@ failed_init_enc:
 failed_init_handle:
     EbDeinitHandle(svt_enc->svt_handle);
 failed:
+    free_buffer(svt_enc);
     return error_mapping(svt_ret);
 }
 
