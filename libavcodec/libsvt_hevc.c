@@ -186,7 +186,8 @@ static int config_enc_params(EB_H265_ENC_CONFIGURATION *param,
     param->accessUnitDelimiter    = svt_enc->aud;
 
     param->targetBitRate          = avctx->bit_rate;
-    param->intraPeriodLength      = avctx->gop_size - 1;
+    if (avctx->gop_size > 0)
+        param->intraPeriodLength  = avctx->gop_size - 1;
 
     if (avctx->framerate.num > 0 && avctx->framerate.den > 0) {
         param->frameRateNumerator     = avctx->framerate.num;
