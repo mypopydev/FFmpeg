@@ -2103,7 +2103,8 @@ void ff_configure_buffers_for_index(AVFormatContext *s, int64_t time_tolerance)
                "optimally without knowing the protocol\n");
     }
 
-    if (proto && !(strcmp(proto, "file") && strcmp(proto, "pipe") && strcmp(proto, "cache")))
+    if (proto && !(strcmp(proto, "file") && strcmp(proto, "pipe") && strcmp(proto, "cache") &&
+                   strcmp(proto, "https") && strcmp(proto, "http") && strcmp(proto, "crypto")))
         return;
 
     for (ist1 = 0; ist1 < s->nb_streams; ist1++) {
