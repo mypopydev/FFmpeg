@@ -38,6 +38,8 @@
 #include "vf_nlmeans.h"
 #include "video.h"
 
+#include <immintrin.h>
+
 struct weighted_avg {
     float total_weight;
     float sum;
@@ -62,7 +64,7 @@ typedef struct NLMeansContext {
     ptrdiff_t ii_lz_32;                         // linesize in 32-bit units of the integral image
     struct weighted_avg *wa;                    // weighted average of every pixel
     ptrdiff_t wa_linesize;                      // linesize for wa in struct size unit
-    float weight_lut[WEIGHT_LUT_SIZE];          // lookup table mapping (scaled) patch differences to their associated weights
+    float weight_lut[WEIGHT_LUT_SIZE+1];        // lookup table mapping (scaled) patch differences to their associated weights
     float pdiff_lut_scale;                      // scale factor for patch differences before looking into the LUT
     uint32_t max_meaningful_diff;               // maximum difference considered (if the patch difference is too high we ignore the pixel)
     NLMeansDSPContext dsp;
@@ -364,6 +366,7 @@ static int nlmeans_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
     for (y = starty; y < endy; y++) {
         const uint8_t *src = td->src + y*src_linesize;
         struct weighted_avg *wa = s->wa + y*s->wa_linesize;
+#if 0
         for (x = td->startx; x < td->endx; x++) {
             /*
              * M is a discrete map where every entry contains the sum of all the entries
@@ -407,6 +410,44 @@ static int nlmeans_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
                 wa[x].sum += weight * src[x];
             }
         }
+#else
+        for (x = td->startx; x < td->endx; x+=8) {
+            __m256i a = _mm256_loadu_si256((__m256i const *)&ii[x]);
+            __m256i b = _mm256_loadu_si256((__m256i const *)&ii[x + dist_b]);
+            __m256i d = _mm256_loadu_si256((__m256i const *)&ii[x + dist_d]);
+            __m256i e = _mm256_loadu_si256((__m256i const *)&ii[x + dist_e]);
+            __m256i patch_diff_sq;
+            __m256i mask;
+
+            a = _mm256_add_epi32(a, e); // a + e
+            d = _mm256_add_epi32(d, b); // d + b
+            patch_diff_sq = _mm256_sub_epi32(a, d); // (a + e) - (d + b)
+
+            mask = _mm256_cmpgt_epi32(patch_diff_sq,
+                                      _mm256_set1_epi32(s->max_meaningful_diff));
+
+            __m256 patch_diff = _mm256_cvtepi32_ps(patch_diff_sq);   // int -> float
+            __m256 scale = _mm256_broadcast_ss(&s->pdiff_lut_scale); //
+            __m256 lut_idx = _mm256_mul_ps(patch_diff, scale);       // patch_diff_sq * s->pdiff_lut_scale;
+            __m256i weight_lut_diff = _mm256_cvttps_epi32(lut_idx);  // float -> int
+
+             weight_lut_diff = _mm256_and_si256 (weight_lut_diff, mask);
+
+             // lut table
+             __m256 weight =  _mm256_i32gather_ps(&s->weight_lut[0], weight_lut_diff, 4);
+
+             weight = _mm256_and_ps (weight, _mm256_cvtepi32_ps(mask));
+
+            #if 0
+            if (patch_diff_sq < s->max_meaningful_diff) {
+                const unsigned weight_lut_idx = patch_diff_sq * s->pdiff_lut_scale;
+                const float weight = s->weight_lut[weight_lut_idx]; // exp(-patch_diff_sq * s->pdiff_scale)
+                wa[x].total_weight += weight;
+                wa[x].sum += weight * src[x];
+            }
+             #endif
+        }
+#endif
         ii += s->ii_lz_32;
     }
     return 0;
@@ -529,8 +570,11 @@ static av_cold int init(AVFilterContext *ctx)
     s->max_meaningful_diff = -log(1/255.) / s->pdiff_scale;
     s->pdiff_lut_scale = 1./s->max_meaningful_diff * WEIGHT_LUT_SIZE;
     av_assert0((s->max_meaningful_diff - 1) * s->pdiff_lut_scale < FF_ARRAY_ELEMS(s->weight_lut));
-    for (i = 0; i < WEIGHT_LUT_SIZE; i++)
+    for (i = 0; i < WEIGHT_LUT_SIZE; i++) {
         s->weight_lut[i] = exp(-i / s->pdiff_lut_scale * s->pdiff_scale);
+        //printf ("i %d, val %f\n", i ,s->weight_lut[i]);
+    }
+    s->weight_lut[WEIGHT_LUT_SIZE] = 0;
 
     CHECK_ODD_FIELD(research_size,   "Luma research window");
     CHECK_ODD_FIELD(patch_size,      "Luma patch");
@@ -542,6 +586,7 @@ static av_cold int init(AVFilterContext *ctx)
     CHECK_ODD_FIELD(patch_size_uv,    "Chroma patch");
 
     s->research_hsize    = s->research_size    / 2;
+
     s->research_hsize_uv = s->research_size_uv / 2;
     s->patch_hsize       = s->patch_size       / 2;
     s->patch_hsize_uv    = s->patch_size_uv    / 2;
