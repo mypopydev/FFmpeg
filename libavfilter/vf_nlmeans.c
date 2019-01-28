@@ -40,10 +40,8 @@
 
 #include <immintrin.h>
 
-struct weighted_avg {
-    float total_weight;
-    float sum;
-};
+float *total_weight;
+float *sum;
 
 #define WEIGHT_LUT_NBITS 9
 #define WEIGHT_LUT_SIZE  (1<<WEIGHT_LUT_NBITS)
@@ -62,7 +60,7 @@ typedef struct NLMeansContext {
     uint32_t *ii;                               // integral image starting after the 0-line and 0-column
     int ii_w, ii_h;                             // width and height of the integral image
     ptrdiff_t ii_lz_32;                         // linesize in 32-bit units of the integral image
-    struct weighted_avg *wa;                    // weighted average of every pixel
+    //struct weighted_avg  wa;                    // weighted average of every pixel
     ptrdiff_t wa_linesize;                      // linesize for wa in struct size unit
     float weight_lut[WEIGHT_LUT_SIZE+1];        // lookup table mapping (scaled) patch differences to their associated weights
     float pdiff_lut_scale;                      // scale factor for patch differences before looking into the LUT
@@ -330,8 +328,9 @@ static int config_input(AVFilterLink *inlink)
 
     // allocate weighted average for every pixel
     s->wa_linesize = inlink->w;
-    s->wa = av_malloc_array(s->wa_linesize, inlink->h * sizeof(*s->wa));
-    if (!s->wa)
+    total_weight = av_malloc_array(s->wa_linesize, inlink->h * sizeof(*total_weight));
+    sum = av_malloc_array(s->wa_linesize, inlink->h * sizeof(*sum));
+    if (!total_weight || !sum)
         return AVERROR(ENOMEM);
 
     return 0;
@@ -365,7 +364,8 @@ static int nlmeans_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
 
     for (y = starty; y < endy; y++) {
         const uint8_t *src = td->src + y*src_linesize;
-        struct weighted_avg *wa = s->wa + y*s->wa_linesize;
+        float *total_weight_y = total_weight + y*s->wa_linesize;
+        float *sum_y = sum + y*s->wa_linesize;
 #if 0
         for (x = td->startx; x < td->endx; x++) {
             /*
@@ -435,8 +435,12 @@ static int nlmeans_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
 
              // lut table
              __m256 weight =  _mm256_i32gather_ps(&s->weight_lut[0], weight_lut_diff, 4);
-
              weight = _mm256_and_ps (weight, _mm256_cvtepi32_ps(mask));
+
+             __m256 wa_total_weight  = _mm256_loadu_ps((float const *)&total_weight_y[x]);
+             wa_total_weight = _mm256_add_ps(wa_total_weight, weight);
+
+             __m256 wa_sum  = _mm256_loadu_ps((float const *)&sum_y[x]);
 
             #if 0
             if (patch_diff_sq < s->max_meaningful_diff) {
@@ -453,23 +457,34 @@ static int nlmeans_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
     return 0;
 }
 
+#if 0
 static void weight_averages(uint8_t *dst, ptrdiff_t dst_linesize,
                             const uint8_t *src, ptrdiff_t src_linesize,
                             struct weighted_avg *wa, ptrdiff_t wa_linesize,
                             int w, int h)
+#else
+static void weight_averages(uint8_t *dst, ptrdiff_t dst_linesize,
+                            const uint8_t *src, ptrdiff_t src_linesize,
+                            ptrdiff_t wa_linesize,
+                            int w, int h)
+#endif
 {
     int x, y;
+
+    float *total_weight_t = total_weight;
+    float *sum_t = sum;
 
     for (y = 0; y < h; y++) {
         for (x = 0; x < w; x++) {
             // Also weight the centered pixel
-            wa[x].total_weight += 1.f;
-            wa[x].sum += 1.f * src[x];
-            dst[x] = av_clip_uint8(wa[x].sum / wa[x].total_weight);
+            total_weight_t[x] += 1.f;
+            sum_t[x] += 1.f * src[x];
+            dst[x] = av_clip_uint8(sum_t[x] / total_weight_t[x]);
         }
         dst += dst_linesize;
         src += src_linesize;
-        wa += wa_linesize;
+        total_weight_t += wa_linesize;
+        sum_t += wa_linesize;
     }
 }
 
@@ -485,7 +500,8 @@ static int nlmeans_plane(AVFilterContext *ctx, int w, int h, int p, int r,
     /* focus an integral pointer on the centered image (s1) */
     const uint32_t *centered_ii = s->ii + e*s->ii_lz_32 + e;
 
-    memset(s->wa, 0, s->wa_linesize * h * sizeof(*s->wa));
+    memset(total_weight, 0, s->wa_linesize * h * sizeof(*total_weight));
+    memset(sum, 0, s->wa_linesize * h * sizeof(*sum));
 
     for (offy = -r; offy <= r; offy++) {
         for (offx = -r; offx <= r; offx++) {
@@ -510,8 +526,13 @@ static int nlmeans_plane(AVFilterContext *ctx, int w, int h, int p, int r,
         }
     }
 
+#if 0
     weight_averages(dst, dst_linesize, src, src_linesize,
                     s->wa, s->wa_linesize, w, h);
+#else
+    weight_averages(dst, dst_linesize, src, src_linesize,
+                    s->wa_linesize, w, h);
+#endif
 
     return 0;
 }
@@ -604,7 +625,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     NLMeansContext *s = ctx->priv;
     av_freep(&s->ii_orig);
-    av_freep(&s->wa);
+    //av_freep(&s->wa);
 }
 
 static const AVFilterPad nlmeans_inputs[] = {
