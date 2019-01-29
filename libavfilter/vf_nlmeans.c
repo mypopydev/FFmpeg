@@ -61,7 +61,7 @@ typedef struct NLMeansContext {
     ptrdiff_t ii_lz_32;                         // linesize in 32-bit units of the integral image
     struct weighted_avg wa;                     // weighted average of every pixel
     ptrdiff_t wa_linesize;                      // linesize for wa in struct size unit
-    float weight_lut[WEIGHT_LUT_SIZE];          // lookup table mapping (scaled) patch differences to their associated weights
+    float weight_lut[WEIGHT_LUT_SIZE+1];        // lookup table mapping (scaled) patch differences to their associated weights
     uint32_t max_meaningful_diff;               // maximum difference considered (if the patch difference is too high we ignore the pixel)
     NLMeansDSPContext dsp;
 } NLMeansContext;
@@ -534,6 +534,7 @@ static av_cold int init(AVFilterContext *ctx)
     av_assert0((s->max_meaningful_diff - 1) < FF_ARRAY_ELEMS(s->weight_lut));
     for (i = 0; i < WEIGHT_LUT_SIZE; i++)
         s->weight_lut[i] = exp(-i * s->pdiff_scale);
+    s->weight_lut[WEIGHT_LUT_SIZE] = 0;
 
     CHECK_ODD_FIELD(research_size,   "Luma research window");
     CHECK_ODD_FIELD(patch_size,      "Luma patch");
