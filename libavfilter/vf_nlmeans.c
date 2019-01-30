@@ -120,6 +120,7 @@ static void compute_safe_ssd_integral_image_c(uint32_t *dst, ptrdiff_t dst_lines
     av_assert2(!(w & 0xf) && w >= 16 && h >= 1);
 
     for (y = 0; y < h; y++) {
+#if 0
         for (x = 0; x < w; x += 4) {
             const int d0 = s1[x    ] - s2[x    ];
             const int d1 = s1[x + 1] - s2[x + 1];
@@ -136,6 +137,39 @@ static void compute_safe_ssd_integral_image_c(uint32_t *dst, ptrdiff_t dst_lines
             dst[x + 2] += dst[x + 1];
             dst[x + 3] += dst[x + 2];
         }
+#else
+        for (x = 0; x < w; x += 8) {
+            __m128i small_load = _mm_cvtsi64_si128(*(uint64_t*)&s1[x]);
+            __m256i s1_x = _mm256_cvtepu8_epi32(small_load);
+
+            small_load = _mm_cvtsi64_si128(*(uint64_t*)&s2[x]);
+            __m256i s2_x = _mm256_cvtepu8_epi32(small_load);
+
+            __m256i d = _mm256_sub_epi32(s1_x, s2_x); // s1[x    ] - s2[x    ];
+
+            __m256i dst_top_x      = _mm256_loadu_si256((__m256i const *)&dst_top[x]);
+            __m256i dst_top_min1   = _mm256_loadu_si256((__m256i const *)&dst_top[x-1]);
+
+            __m256i dst_x = _mm256_sub_epi32(dst_top_x, dst_top_min1); //dst_top[x    ] - dst_top[x - 1] + d * d
+            dst_x = _mm256_add_epi32(dst_x, _mm256_mul_epi32(d, d));
+            _mm256_storeu_si256 (&dst[x], dst_x);
+
+            dst[x    ] += dst[x - 1];
+            dst[x + 1] += dst[x    ];
+            dst[x + 2] += dst[x + 1];
+            dst[x + 3] += dst[x + 2];
+            dst[x + 4] += dst[x + 3];
+            dst[x + 5] += dst[x + 4];
+            dst[x + 6] += dst[x + 5];
+            dst[x + 7] += dst[x + 6];
+        }
+
+        for (x = (w/8 * 8); x < w; x++) {
+            const int d0 = s1[x] - s2[x];
+            dst[x] = dst_top[x] - dst_top[x - 1] + d0*d0;
+            dst[x] += dst[x - 1];
+        }
+#endif
         s1  += linesize1;
         s2  += linesize2;
         dst += dst_linesize_32;
