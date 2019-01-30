@@ -38,6 +38,8 @@
 #include "vf_nlmeans.h"
 #include "video.h"
 
+#include <immintrin.h>
+
 struct weighted_avg {
     float *total_weight;
     float *sum;
@@ -364,6 +366,7 @@ static int nlmeans_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
         const uint8_t *src = td->src + y*src_linesize;
         float *total_weight_y = s->wa.total_weight + y*s->wa_linesize;
         float *sum_y = s->wa.sum + y*s->wa_linesize;
+#if 0
         for (x = td->startx; x < td->endx; x++) {
             /*
              * M is a discrete map where every entry contains the sum of all the entries
@@ -406,6 +409,60 @@ static int nlmeans_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
                 sum_y[x] += weight * src[x];
             }
         }
+#else
+        for (x = td->startx; x < td->endx; x+=8) {
+            __m256i a = _mm256_loadu_si256((__m256i const *)&ii[x]);
+            __m256i b = _mm256_loadu_si256((__m256i const *)&ii[x + dist_b]);
+            __m256i d = _mm256_loadu_si256((__m256i const *)&ii[x + dist_d]);
+            __m256i e = _mm256_loadu_si256((__m256i const *)&ii[x + dist_e]);
+            __m256i patch_diff_sq;
+            __m256i mask;
+            __m256 weight;
+
+            // patch_diff_sq = (a + e) - (d + b)
+            a = _mm256_add_epi32(a, e); // a + e
+            d = _mm256_add_epi32(d, b); // d + b
+            patch_diff_sq = _mm256_sub_epi32(a, d); // (a + e) - (d + b)
+
+            mask = _mm256_cmpgt_epi32(patch_diff_sq,
+                                      _mm256_set1_epi32(s->max_meaningful_diff));
+
+            patch_diff_sq = _mm256_and_si256 (patch_diff_sq, mask);
+
+            // lut tablepatch_diff_sq
+            weight = _mm256_i32gather_ps(&s->weight_lut[0], patch_diff_sq, 1);
+            weight = _mm256_and_ps (weight, _mm256_cvtepi32_ps(mask));
+
+            __m256 wa_total_weight = _mm256_loadu_ps((float const *)&total_weight_y[x]);
+            wa_total_weight = _mm256_add_ps(wa_total_weight, weight);
+
+            __m256 wa_sum  = _mm256_loadu_ps((float const *)&sum_y[x]);
+
+            // load 64bits and change it to 8 * float
+            __m128i small_load = _mm_cvtsi64_si128(*(uint64_t*)&src[0]);
+            __m256i intvec = _mm256_cvtepu8_epi32(small_load);
+            __m256 src_x = _mm256_cvtepi32_ps(intvec);
+
+            wa_sum = _mm256_fmadd_ps(weight, src_x, wa_sum);
+
+            _mm256_store_ps(total_weight_y, wa_total_weight);
+            _mm256_store_ps(sum_y, wa_sum);
+        }
+
+        for (x= td->endx/8 * 8 ; x < td->endx; x++) {
+            const uint32_t a = ii[x];
+            const uint32_t b = ii[x + dist_b];
+            const uint32_t d = ii[x + dist_d];
+            const uint32_t e = ii[x + dist_e];
+            const uint32_t patch_diff_sq = e - d - b + a;
+
+            if (patch_diff_sq < s->max_meaningful_diff) {
+                const float weight = s->weight_lut[patch_diff_sq]; // exp(-patch_diff_sq * s->pdiff_scale)
+                total_weight_y[x] += weight;
+                sum_y[x] += weight * src[x];
+            }
+        }
+#endif
         ii += s->ii_lz_32;
     }
     return 0;
