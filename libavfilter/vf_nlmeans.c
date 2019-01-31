@@ -458,13 +458,13 @@ static int nlmeans_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs
             d = _mm256_add_epi32(d, b); // d + b
             patch_diff_sq = _mm256_sub_epi32(a, d); // (a + e) - (d + b)
 
-            mask = _mm256_cmpgt_epi32(patch_diff_sq,
-                                      _mm256_set1_epi32(s->max_meaningful_diff));
+            mask = _mm256_cmpgt_epi32(_mm256_set1_epi32(s->max_meaningful_diff),
+                                      patch_diff_sq);
 
             patch_diff_sq = _mm256_and_si256 (patch_diff_sq, mask);
 
             // lut tablepatch_diff_sq
-            weight = _mm256_i32gather_ps(&s->weight_lut[0], patch_diff_sq, 1);
+            weight = _mm256_i32gather_ps(&s->weight_lut[0], patch_diff_sq, 4);
             weight = _mm256_and_ps (weight, _mm256_cvtepi32_ps(mask));
 
             __m256 wa_total_weight = _mm256_loadu_ps((float const *)&total_weight_y[x]);
