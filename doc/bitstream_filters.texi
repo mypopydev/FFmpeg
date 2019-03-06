@@ -267,6 +267,27 @@ insert the string ``hello'' associated with the given UUID.
 @item delete_filler
 Deletes both filler NAL units and filler SEI messages.
 
+@item display_orientation
+Pass, insert, remove or extract display orientation SEI.  Default is pass.
+
+@table @samp
+@item pass
+@item insert
+@item remove
+@item extract
+@end table
+
+@item rotate
+Set rotation in display orientation SEI (anticlockwise angle in degrees) (from -360 to 360)
+
+@item flip
+Set flip in display orientation SEI
+
+@table @samp
+@item horizontal
+@item vertical
+@end table
+
 @item level
 Set the level in the SPS.  Refer to H.264 section A.3 and tables A-1
 to A-5.
