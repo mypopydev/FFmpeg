@@ -477,6 +477,17 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     NLMeansContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
 
+    // accumulation of 8-bits uint_8 into 32-bits data type, it will have
+    // a risk of an integral value becoming larger than the 32-bits integer
+    // capacity and resulting in an integer overflow, so limit the image size
+    if ((UINT32_MAX / (uint64_t)inlink->w) < (255 * (uint64_t)inlink->h)) {
+        av_log(ctx, AV_LOG_ERROR,
+               "image size (%d x %d) integral value may overflow.\n",
+               inlink->w, inlink->h);
+        av_frame_free(&in);
+        return AVERROR(EINVAL);
+    }
+
     AVFrame *out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     if (!out) {
         av_frame_free(&in);
