@@ -236,6 +236,13 @@ static void compute_ssd_integral_image(const NLMeansDSPContext *dsp,
     // adjusted end x position of the safe area after width of the safe area gets aligned
     const int endx_safe = startx_safe + safe_pw;
 
+    // accumulation of 8-bits uint_8 (uint8_t *src) into 32-bits (uint32_t *ii)
+    // data type, it will have a risk of an integral value becoming larger than
+    // the 32-bits integer capacity and resulting in an integer overflow.
+    if ((w * h * UINT8_MAX) > UINT32_MAX)
+        av_log(NULL, AV_LOG_WARNING,
+               "image (%d x %d) integral value maybe overflow.\n", w ,h);
+
     // top part where only one of s1 and s2 is still readable, or none at all
     compute_unsafe_ssd_integral_image(ii, ii_linesize_32,
                                       0, 0,
