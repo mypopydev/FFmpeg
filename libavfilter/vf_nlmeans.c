@@ -476,6 +476,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     NLMeansContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
+    AVFrame *out;
 
     // accumulation of 8-bits uint_8 into 32-bits data type, it will have
     // a risk of an integral value becoming larger than the 32-bits integer
@@ -488,7 +489,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         return AVERROR(EINVAL);
     }
 
-    AVFrame *out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     if (!out) {
         av_frame_free(&in);
         return AVERROR(ENOMEM);
