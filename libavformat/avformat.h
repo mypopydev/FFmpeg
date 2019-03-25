@@ -1770,7 +1770,7 @@ typedef struct AVFormatContext {
     /**
      * number of bytes to read maximally to identify format.
      * - encoding: unused
-     * - decoding: set by user
+     * - decoding: set by user before avformat_open_input().
      */
     int format_probesize;
 
