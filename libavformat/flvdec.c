@@ -662,7 +662,7 @@ static int amf_parse_object(AVFormatContext *s, AVStream *astream,
                        sizeof(str_val));
             av_dict_set(&s->metadata, key, str_val, 0);
         } else if (amf_type == AMF_DATA_TYPE_NUMBER) {
-            snprintf(str_val, sizeof(str_val), "%.f", num_val);
+            snprintf(str_val, sizeof(str_val), "%.6g", num_val);
             av_dict_set(&s->metadata, key, str_val, 0);
         } else if (amf_type == AMF_DATA_TYPE_STRING) {
             av_dict_set(&s->metadata, key, str_val, 0);
