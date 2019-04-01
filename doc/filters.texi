@@ -19030,6 +19030,10 @@ Apply erosion filter with threshold0 set to 30, threshold1 set 40, threshold2 se
 @end example
 @end itemize
 
+@section nlmeans_opencl
+
+Non-local Means denoise filter through OpenCL, this filter accepts same options as @ref{nlmeans}.
+
 @section overlay_opencl
 
 Overlay one video on top of another.
