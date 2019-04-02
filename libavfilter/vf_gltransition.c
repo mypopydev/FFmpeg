@@ -9,7 +9,7 @@
 #include "framesync.h"
 
 #ifndef __APPLE__
-# define GL_TRANSITION_USING_EGL //remove this line if you don't want to use EGL
+//# define GL_TRANSITION_USING_EGL //remove this line if you don't want to use EGL
 #endif
 
 #ifdef __APPLE__
