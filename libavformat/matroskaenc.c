@@ -2571,13 +2571,13 @@ static int mkv_write_trailer(AVFormatContext *s)
     // check if we have an audio packet cached
     if (mkv->cur_audio_pkt.size > 0) {
         ret = mkv_write_packet_internal(s, &mkv->cur_audio_pkt, 0);
-        av_packet_unref(&mkv->cur_audio_pkt);
         if (ret < 0) {
             av_log(s, AV_LOG_ERROR,
                    "Could not write cached audio packet ret:%d\n", ret);
             return ret;
         }
     }
+    av_packet_unref(&mkv->cur_audio_pkt);
 
     if (mkv->dyn_bc) {
         end_ebml_master_crc32(pb, &mkv->dyn_bc, mkv, mkv->cluster);
