@@ -71,11 +71,18 @@ typedef struct VignetteContext {
     int fmap_linesize;
     double dmax;
     float xscale, yscale;
-    uint32_t dither;
     int do_dither;
     AVRational aspect;
     AVRational scale;
 } VignetteContext;
+
+typedef struct ThreadData {
+    AVFrame *in, *out;
+    uint32_t dither;
+
+    int height;
+    int width;
+} ThreadData;
 
 #define OFFSET(x) offsetof(VignetteContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
@@ -198,23 +205,107 @@ static void update_context(VignetteContext *s, AVFilterLink *inlink, AVFrame *fr
     }
 }
 
-static inline double get_dither_value(VignetteContext *s)
+static inline double get_dither_value(VignetteContext *s, ThreadData *td)
 {
     double dv = 0;
     if (s->do_dither) {
-        dv = s->dither / (double)(1LL<<32);
-        s->dither = s->dither * 1664525 + 1013904223;
+        dv = td->dither / (double)(1LL<<32);
+        td->dither = td->dither * 1664525 + 1013904223;
     }
     return dv;
 }
 
+static int vignette_rgb(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    uint32_t x, y;
+    VignetteContext *s = ctx->priv;
+    ThreadData *td = arg;
+    const int height = td->height;
+    const int width = td->width;
+    const int slice_start = (height *  jobnr   ) / nb_jobs;
+    const int slice_end   = (height * (jobnr+1)) / nb_jobs;
+    AVFrame *out = td->out;
+    AVFrame *in = td->in;
+
+    uint8_t       *dst = out->data[0];
+    const uint8_t *src = in ->data[0];
+
+    const float *fmap = s->fmap;
+    const int dst_linesize = out->linesize[0];
+    const int src_linesize = in ->linesize[0];
+    const int fmap_linesize = s->fmap_linesize;
+
+    for (y = slice_start; y < slice_end; y++) {
+        uint8_t       *dstp = dst + y * dst_linesize;
+        const uint8_t *srcp = src + y * src_linesize;
+
+        for (x = 0; x < width; x++, dstp += 3, srcp += 3) {
+            const float f = fmap[x];
+
+            dstp[0] = av_clip_uint8(srcp[0] * f + get_dither_value(s, td));
+            dstp[1] = av_clip_uint8(srcp[1] * f + get_dither_value(s, td));
+            dstp[2] = av_clip_uint8(srcp[2] * f + get_dither_value(s, td));
+        }
+        //dst += dst_linesize;
+        //src += src_linesize;
+        fmap += fmap_linesize;
+    }
+
+    return 0;
+}
+
+static int vignette_yuv(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    uint32_t x, y;
+    int plane;
+    ThreadData *td = arg;
+    AVFrame *out = td->out;
+    AVFrame *in = td->in;
+    VignetteContext *s = ctx->priv;
+
+    for (plane = 0; plane < 4 && in->data[plane] && in->linesize[plane]; plane++) {
+        uint8_t       *dst = out->data[plane];
+        const uint8_t *src = in ->data[plane];
+        const float *fmap = s->fmap;
+        const int dst_linesize = out->linesize[plane];
+        const int src_linesize = in ->linesize[plane];
+        const int fmap_linesize = s->fmap_linesize;
+        const int height = td->height;
+        const int width = td->width;
+        const int chroma = plane == 1 || plane == 2;
+        const int hsub = chroma ? s->desc->log2_chroma_w : 0;
+        const int vsub = chroma ? s->desc->log2_chroma_h : 0;
+        const int w = AV_CEIL_RSHIFT(width, hsub);
+        const int h = AV_CEIL_RSHIFT(height, vsub);
+        const int slice_start = (h *  jobnr   ) / nb_jobs;
+        const int slice_end   = (h * (jobnr+1)) / nb_jobs;
+
+        for (y = slice_start; y < slice_end; y++) {
+            uint8_t *dstp = dst + y * dst_linesize;
+            const uint8_t *srcp = src + y * src_linesize;
+
+            for (x = 0; x < w; x++) {
+                const double dv = get_dither_value(s, td);
+                if (chroma) *dstp++ = av_clip_uint8(fmap[x << hsub] * (*srcp++ - 127) + 127 + dv);
+                else        *dstp++ = av_clip_uint8(fmap[x        ] *  *srcp++              + dv);
+            }
+            //dst += dst_linesize;
+            //src += src_linesize;
+            fmap += fmap_linesize << vsub;
+        }
+    }
+
+    return 0;
+}
+
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
-    unsigned x, y, direct = 0;
+    unsigned direct = 0;
     AVFilterContext *ctx = inlink->dst;
     VignetteContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
     AVFrame *out;
+    ThreadData td = { 0 };
 
     if (av_frame_is_writable(in)) {
         direct = 1;
@@ -231,59 +322,16 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (s->eval_mode == EVAL_MODE_FRAME)
         update_context(s, inlink, in);
 
+    td.in = in;
+    td.out = out;
+    td.height = inlink->h;
+    td.width = inlink->w;
     if (s->desc->flags & AV_PIX_FMT_FLAG_RGB) {
-        uint8_t       *dst = out->data[0];
-        const uint8_t *src = in ->data[0];
-        const float *fmap = s->fmap;
-        const int dst_linesize = out->linesize[0];
-        const int src_linesize = in ->linesize[0];
-        const int fmap_linesize = s->fmap_linesize;
-
-        for (y = 0; y < inlink->h; y++) {
-            uint8_t       *dstp = dst;
-            const uint8_t *srcp = src;
-
-            for (x = 0; x < inlink->w; x++, dstp += 3, srcp += 3) {
-                const float f = fmap[x];
-
-                dstp[0] = av_clip_uint8(srcp[0] * f + get_dither_value(s));
-                dstp[1] = av_clip_uint8(srcp[1] * f + get_dither_value(s));
-                dstp[2] = av_clip_uint8(srcp[2] * f + get_dither_value(s));
-            }
-            dst += dst_linesize;
-            src += src_linesize;
-            fmap += fmap_linesize;
-        }
+        ctx->internal->execute(ctx, vignette_rgb, &td, NULL,
+                               FFMIN(inlink->h, ff_filter_get_nb_threads(ctx)));
     } else {
-        int plane;
-
-        for (plane = 0; plane < 4 && in->data[plane] && in->linesize[plane]; plane++) {
-            uint8_t       *dst = out->data[plane];
-            const uint8_t *src = in ->data[plane];
-            const float *fmap = s->fmap;
-            const int dst_linesize = out->linesize[plane];
-            const int src_linesize = in ->linesize[plane];
-            const int fmap_linesize = s->fmap_linesize;
-            const int chroma = plane == 1 || plane == 2;
-            const int hsub = chroma ? s->desc->log2_chroma_w : 0;
-            const int vsub = chroma ? s->desc->log2_chroma_h : 0;
-            const int w = AV_CEIL_RSHIFT(inlink->w, hsub);
-            const int h = AV_CEIL_RSHIFT(inlink->h, vsub);
-
-            for (y = 0; y < h; y++) {
-                uint8_t *dstp = dst;
-                const uint8_t *srcp = src;
-
-                for (x = 0; x < w; x++) {
-                    const double dv = get_dither_value(s);
-                    if (chroma) *dstp++ = av_clip_uint8(fmap[x << hsub] * (*srcp++ - 127) + 127 + dv);
-                    else        *dstp++ = av_clip_uint8(fmap[x        ] *  *srcp++              + dv);
-                }
-                dst += dst_linesize;
-                src += src_linesize;
-                fmap += fmap_linesize << vsub;
-            }
-        }
+        ctx->internal->execute(ctx, vignette_yuv, &td, NULL,
+                               FFMIN(inlink->h, ff_filter_get_nb_threads(ctx)));
     }
 
     if (!direct)
@@ -356,4 +404,5 @@ AVFilter ff_vf_vignette = {
     .outputs       = vignette_outputs,
     .priv_class    = &vignette_class,
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
+    //.flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
 };
