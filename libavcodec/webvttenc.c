@@ -24,11 +24,13 @@
 #include "avcodec.h"
 #include "libavutil/avstring.h"
 #include "libavutil/bprint.h"
+#include "libavutil/opt.h"
 #include "ass_split.h"
 #include "ass.h"
 
 #define WEBVTT_STACK_SIZE 64
 typedef struct {
+    const AVClass *class;
     AVCodecContext *avctx;
     ASSSplitContext *ass_ctx;
     AVBPrint buffer;
@@ -224,6 +226,17 @@ static av_cold int webvtt_encode_init(AVCodecContext *avctx)
     return s->ass_ctx ? 0 : AVERROR_INVALIDDATA;
 }
 
+static const AVOption options[] = {
+    { NULL },
+};
+
+static const AVClass webvtt_encoder_class = {
+    .class_name = "WebVTT encoder",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 AVCodec ff_webvtt_encoder = {
     .name           = "webvtt",
     .long_name      = NULL_IF_CONFIG_SMALL("WebVTT subtitle"),
@@ -233,4 +246,5 @@ AVCodec ff_webvtt_encoder = {
     .init           = webvtt_encode_init,
     .encode_sub     = webvtt_encode_frame,
     .close          = webvtt_encode_close,
+    .priv_class     = &webvtt_encoder_class,
 };
