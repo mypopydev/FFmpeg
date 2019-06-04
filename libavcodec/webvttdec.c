@@ -28,6 +28,7 @@
 #include "avcodec.h"
 #include "ass.h"
 #include "libavutil/bprint.h"
+#include "libavutil/opt.h"
 
 static const struct {
     const char *from;
@@ -98,6 +99,17 @@ static int webvtt_decode_frame(AVCodecContext *avctx,
     return avpkt->size;
 }
 
+static const AVOption options[] = {
+    { NULL },
+};
+
+static const AVClass webvtt_decoder_class = {
+    .class_name = "WebVTT decoder",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
+
 AVCodec ff_webvtt_decoder = {
     .name           = "webvtt",
     .long_name      = NULL_IF_CONFIG_SMALL("WebVTT subtitle"),
@@ -107,4 +119,5 @@ AVCodec ff_webvtt_decoder = {
     .init           = ff_ass_subtitle_header_default,
     .flush          = ff_ass_decoder_flush,
     .priv_data_size = sizeof(FFASSDecoderContext),
+    .priv_class     = &webvtt_decoder_class,
 };
