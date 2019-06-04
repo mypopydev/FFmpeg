@@ -26,6 +26,7 @@
 
 #include "avformat.h"
 #include "internal.h"
+#include "libavutil/opt.h"
 
 static void webvtt_write_time(AVIOContext *pb, int64_t millisec)
 {
@@ -94,6 +95,17 @@ static int webvtt_write_packet(AVFormatContext *ctx, AVPacket *pkt)
     return 0;
 }
 
+static const AVOption options[] = {
+    { NULL }
+};
+
+static const AVClass webvtt_muxer_class = {
+    .class_name  = "WebVTT muxer",
+    .item_name   = av_default_item_name,
+    .option      = options,
+    .version     = LIBAVUTIL_VERSION_INT,
+};
+
 AVOutputFormat ff_webvtt_muxer = {
     .name              = "webvtt",
     .long_name         = NULL_IF_CONFIG_SMALL("WebVTT subtitle"),
@@ -103,4 +115,5 @@ AVOutputFormat ff_webvtt_muxer = {
     .subtitle_codec    = AV_CODEC_ID_WEBVTT,
     .write_header      = webvtt_write_header,
     .write_packet      = webvtt_write_packet,
+    .priv_class        = &webvtt_muxer_class,
 };
