@@ -896,13 +896,25 @@ before they have been added to the m3u8 playlist.
 
 @end table
 
-@item hls_playlist_type event
+@item hls_playlist_type @var{int}
+Set the HLS playlist type, Default value is none.
+
+Possible values:
+@table @option
+
+@item none (default)
+NOT contain the EXT-X-PLAYLIST-TYPE tag, usually in the Live playlist, that
+tag allows Media Segments to be removed.
+
+@item event
 Emit @code{#EXT-X-PLAYLIST-TYPE:EVENT} in the m3u8 header. Forces
 @option{hls_list_size} to 0; the playlist can only be appended to.
 
-@item hls_playlist_type vod
+@item vod
 Emit @code{#EXT-X-PLAYLIST-TYPE:VOD} in the m3u8 header. Forces
 @option{hls_list_size} to 0; the playlist must not change.
+
+@end table
 
 @item method
 Use the given HTTP method to create the hls files.
