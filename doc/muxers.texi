@@ -554,32 +554,32 @@ segmentation.
 This muxer supports the following options:
 
 @table @option
-@item hls_init_time @var{seconds}
+@item -hls_init_time @var{seconds}
 Set the initial target segment length in seconds. Default value is @var{0}.
 Segment will be cut on the next key frame after this time has passed on the first m3u8 list.
 After the initial playlist is filled @command{ffmpeg} will cut segments
 at duration equal to @code{hls_time}
 
-@item hls_time @var{seconds}
+@item -hls_time @var{seconds}
 Set the target segment length in seconds. Default value is 2.
 Segment will be cut on the next key frame after this time has passed.
 
-@item hls_list_size @var{size}
+@item -hls_list_size @var{size}
 Set the maximum number of playlist entries. If set to 0 the list file
 will contain all the segments. Default value is 5.
 
-@item hls_delete_threshold @var{size}
+@item -hls_delete_threshold @var{size}
 Set the number of unreferenced segments to keep on disk before @code{hls_flags delete_segments}
 deletes them. Increase this to allow continue clients to download segments which
 were recently referenced in the playlist. Default value is 1, meaning segments older than
 @code{hls_list_size+1} will be deleted.
 
-@item hls_ts_options @var{options_list}
+@item -hls_ts_options @var{options_list}
 Set output format options using a :-separated list of key=value
 parameters. Values containing @code{:} special characters must be
 escaped.
 
-@item hls_wrap @var{wrap}
+@item -hls_wrap @var{wrap}
 This is a deprecated option, you can use @code{hls_list_size}
 and @code{hls_flags delete_segments} instead it
 
@@ -588,7 +588,7 @@ files, and limits the maximum number of segment files written to disk
 to @var{wrap}.
 
 
-@item hls_start_number_source
+@item -hls_start_number_source
 Start the playlist sequence number (@code{#EXT-X-MEDIA-SEQUENCE}) according to the specified source.
 Unless @code{hls_flags single_file} is set, it also specifies source of starting sequence numbers of
 segment and subtitle filenames. In any case, if @code{hls_flags append_list}
@@ -610,16 +610,16 @@ The start number will be based on the current date/time as YYYYmmddHHMMSS. e.g. 
 
 @end table
 
-@item start_number @var{number}
+@item -start_number @var{number}
 Start the playlist sequence number (@code{#EXT-X-MEDIA-SEQUENCE}) from the specified @var{number}
 when @var{hls_start_number_source} value is @var{generic}. (This is the default case.)
 Unless @code{hls_flags single_file} is set, it also specifies starting sequence numbers of segment and subtitle filenames.
 Default value is 0.
 
-@item hls_allow_cache @var{allowcache}
+@item -hls_allow_cache @var{allowcache}
 Explicitly set whether the client MAY (1) or MUST NOT (0) cache media segments.
 
-@item hls_base_url @var{baseurl}
+@item -hls_base_url @var{baseurl}
 Append @var{baseurl} to every entry in the playlist.
 Useful to generate playlists with absolute paths.
 
@@ -628,7 +628,7 @@ and it is not to be confused with the segment filename sequence number
 which can be cyclic, for example if the @option{wrap} option is
 specified.
 
-@item hls_segment_filename @var{filename}
+@item -hls_segment_filename @var{filename}
 Set the segment filename. Unless @code{hls_flags single_file} is set,
 @var{filename} is used as a string format with the segment number:
 @example
@@ -670,10 +670,10 @@ This example will produce the playlists segment file sets:
 @file{vs0/file_000.ts}, @file{vs0/file_001.ts}, @file{vs0/file_002.ts}, etc. and
 @file{vs1/file_000.ts}, @file{vs1/file_001.ts}, @file{vs1/file_002.ts}, etc.
 
-@item use_localtime
+@item -use_localtime
 Same as strftime option, will be deprecated.
 
-@item strftime
+@item -strftime
 Use strftime() on @var{filename} to expand the segment filename with localtime.
 The segment number is also available in this mode, but to use it, you need to specify second_level_segment_index
 hls_flag and %%d will be the specifier.
@@ -690,10 +690,10 @@ ffmpeg -i in.nut -strftime 1 -hls_flags second_level_segment_index -hls_segment_
 This example will produce the playlist, @file{out.m3u8}, and segment files:
 @file{file-20160215-0001.ts}, @file{file-20160215-0002.ts}, etc.
 
-@item use_localtime_mkdir
+@item -use_localtime_mkdir
 Same as strftime_mkdir option, will be deprecated .
 
-@item strftime_mkdir
+@item -strftime_mkdir
 Used together with -strftime_mkdir, it will create all subdirectories which
 is expanded in @var{filename}.
 @example
@@ -711,7 +711,7 @@ produce the playlist, @file{out.m3u8}, and segment files:
 @file{2016/02/15/file-20160215-1455569023.ts}, @file{2016/02/15/file-20160215-1455569024.ts}, etc.
 
 
-@item hls_key_info_file @var{key_info_file}
+@item -hls_key_info_file @var{key_info_file}
 Use the information in @var{key_info_file} for segment encryption. The first
 line of @var{key_info_file} specifies the key URI written to the playlist. The
 key URL is used to access the encryption key during playback. The second line
@@ -784,7 +784,7 @@ in the playlist.
 Hex-coded 16byte initialization vector for every segment instead
 of the autogenerated ones.
 
-@item hls_segment_type @var{flags}
+@item -hls_segment_type @var{flags}
 Possible values:
 
 @table @samp
@@ -798,7 +798,7 @@ fmp4 files may be used in HLS version 7 and above.
 
 @end table
 
-@item hls_fmp4_init_filename @var{filename}
+@item -hls_fmp4_init_filename @var{filename}
 Set filename to the fragment files header file, default filename is @file{init.mp4}.
 
 When @code{var_stream_map} is set with two or more variant streams, the
@@ -810,7 +810,7 @@ sub-directories are created after expanding the directory name pattern. This
 enables creation of init files corresponding to different variant streams in
 subdirectories.
 
-@item hls_flags @var{flags}
+@item -hls_flags @var{flags}
 Possible values:
 
 @table @samp
@@ -901,15 +901,23 @@ are always written into temporary file regardles of this flag if @code{master_pl
 
 @end table
 
-@item hls_playlist_type event
+@item -hls_playlist_type @var{int}
+Set the HLS playlist type, Default value is 0.
+
+Other possible values:
+@table @option
+
+@item event
 Emit @code{#EXT-X-PLAYLIST-TYPE:EVENT} in the m3u8 header. Forces
 @option{hls_list_size} to 0; the playlist can only be appended to.
 
-@item hls_playlist_type vod
+@item vod
 Emit @code{#EXT-X-PLAYLIST-TYPE:VOD} in the m3u8 header. Forces
 @option{hls_list_size} to 0; the playlist must not change.
 
-@item method
+@end table
+
+@item -method
 Use the given HTTP method to create the hls files.
 @example
 ffmpeg -re -i in.ts -f hls -method PUT http://example.com/live/out.m3u8
@@ -920,10 +928,10 @@ server using the HTTP PUT method, and update the m3u8 files every
 Note that the HTTP server must support the given method for uploading
 files.
 
-@item http_user_agent
+@item -http_user_agent
 Override User-Agent field in HTTP header. Applicable only for HTTP output.
 
-@item var_stream_map
+@item -var_stream_map
 Map string which specifies how to group the audio, video and subtitle streams
 into different variant streams. The variant stream groups are separated
 by space.
@@ -1027,7 +1035,7 @@ have and language is named ENG, the other audio language is named CHN.
 
 By default, a single hls variant containing all the encoded streams is created.
 
-@item cc_stream_map
+@item -cc_stream_map
 Map string which specifies different closed captions groups and their
 attributes. The closed captions stream groups are separated by space.
 Expected string format is like this
@@ -1064,7 +1072,7 @@ the master playlist for the INSTREAM-IDs 'CC1' and 'CC2'. Also, it adds
 @code{CLOSED-CAPTIONS} attribute with group name 'cc' for the two output variant
 streams.
 
-@item master_pl_name
+@item -master_pl_name
 Create HLS master playlist with the given name.
 
 @example
@@ -1073,7 +1081,7 @@ ffmpeg -re -i in.ts -f hls -master_pl_name master.m3u8 http://example.com/live/o
 This example creates HLS master playlist with name master.m3u8 and it is
 published at http://example.com/live/
 
-@item master_pl_publish_rate
+@item -master_pl_publish_rate
 Publish master play list repeatedly every after specified number of segment intervals.
 
 @example
@@ -1084,16 +1092,16 @@ ffmpeg -re -i in.ts -f hls -master_pl_name master.m3u8 \
 This example creates HLS master playlist with name master.m3u8 and keep
 publishing it repeatedly every after 30 segments i.e. every after 60s.
 
-@item http_persistent
+@item -http_persistent
 Use persistent HTTP connections. Applicable only for HTTP output.
 
-@item timeout
+@item -timeout
 Set timeout for socket I/O operations. Applicable only for HTTP output.
 
 @item -ignore_io_errors
 Ignore IO errors during open, write and delete. Useful for long-duration runs with network output.
 
-@item headers
+@item -headers
 Set custom HTTP headers, can override built in default headers. Applicable only for HTTP output.
 
 @end table
