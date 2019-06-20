@@ -143,14 +143,13 @@ static void normalize(NormalizeContext *s, AVFrame *in, AVFrame *out)
         min[c].in = max[c].in = in->data[0][s->co[c]];
     for (y = 0; y < in->height; y++) {
         uint8_t *inp = in->data[0] + y * in->linesize[0];
-        uint8_t *outp = out->data[0] + y * out->linesize[0];
         for (x = 0; x < in->width; x++) {
             for (c = 0; c < 3; c++) {
-                min[c].in = FFMIN(min[c].in, inp[s->co[c]]);
-                max[c].in = FFMAX(max[c].in, inp[s->co[c]]);
+                uint8_t val = inp[s->co[c]];
+                if (val < min[c].in)      min[c].in = val;
+                else if (val > max[c].in) max[c].in = val;
             }
             inp += s->step;
-            outp += s->step;
         }
     }
 
