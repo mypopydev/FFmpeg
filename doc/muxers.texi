@@ -256,7 +256,7 @@ DASH-templated name to used for the initialization segment. Default is "init-str
 DASH-templated name to used for the media segments. Default is "chunk-stream$RepresentationID$-$Number%05d$.$ext$". "$ext$" is replaced with the file name extension specific for the segment format.
 @item -utc_timing_url @var{utc_url}
 URL of the page that will return the UTC timestamp in ISO format. Example: "https://time.akamai.com/?iso"
-@item method @var{method}
+@item -method @var{method}
 Use the given HTTP method to create output files. Generally set to PUT or POST.
 @item -http_user_agent @var{user_agent}
 Override User-Agent field in HTTP header. Applicable only for HTTP output.
@@ -298,6 +298,7 @@ Write global SIDX atom. Applicable only for single file, mp4 output, non-streami
 
 @item -dash_segment_type @var{dash_segment_type}
 Possible values:
+@table @option
 @item auto
 If this flag is set, the dash segment files format will be selected based on the stream codec. This is the default mode.
 
@@ -306,6 +307,7 @@ If this flag is set, the dash segment files will be in in ISOBMFF format.
 
 @item webm
 If this flag is set, the dash segment files will be in in WebM format.
+@end table
 
 @item -ignore_io_errors @var{ignore_io_errors}
 Ignore IO errors during open and write. Useful for long-duration runs with network output.
