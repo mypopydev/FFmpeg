@@ -34,6 +34,10 @@ fate-ffmpeg-filter_complex_audio: CMD = framecrc -filter_complex "aevalsrc=0:d=0
 FATE_SAMPLES_FFMPEG-$(call ALLYES, MOV_DEMUXER PNG_DECODER ALAC_DECODER PCM_S16LE_ENCODER RAWVIDEO_ENCODER) += fate-ffmpeg-attached_pics
 fate-ffmpeg-attached_pics: CMD = threads=2 framecrc -i $(TARGET_SAMPLES)/lossless-audio/inside.m4a -c:a pcm_s16le -max_muxing_queue_size 16
 
+# disposition default
+FATE_SAMPLES_FFMPEG-$(call ALLYES, MOV_DEMUXER H264_DECODER AAC_DECODER) += fate-ffmpeg-disposition_default
+fate-ffmpeg-disposition_default: CMD = framecrc -i $(TARGET_SAMPLES)/mov/disposition_default.mp4 -vn -aframes 100
+
 FATE_SAMPLES_FFMPEG-$(CONFIG_COLORKEY_FILTER) += fate-ffmpeg-filter_colorkey
 fate-ffmpeg-filter_colorkey: tests/data/filtergraphs/colorkey
 fate-ffmpeg-filter_colorkey: CMD = framecrc -idct simple -fflags +bitexact -flags +bitexact  -sws_flags +accurate_rnd+bitexact -i $(TARGET_SAMPLES)/cavs/cavs.mpg -fflags +bitexact -flags +bitexact -sws_flags +accurate_rnd+bitexact -i $(TARGET_SAMPLES)/lena.pnm -an -filter_complex_script $(TARGET_PATH)/tests/data/filtergraphs/colorkey -sws_flags +accurate_rnd+bitexact -fflags +bitexact -flags +bitexact -qscale 2 -frames:v 10
