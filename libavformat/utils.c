@@ -2136,7 +2136,11 @@ void ff_configure_buffers_for_index(AVFormatContext *s, int64_t time_tolerance)
     /* XXX This could be adjusted depending on protocol*/
     if (s->pb->buffer_size < pos_delta && pos_delta < (1<<24)) {
         av_log(s, AV_LOG_VERBOSE, "Reconfiguring buffers to size %"PRId64"\n", pos_delta);
-        ffio_set_buf_size(s->pb, pos_delta);
+        /** realloc, the original data in the buffer will be retained */
+        if (ffio_realloc_buf(s->pb, pos_delta)) {
+            av_log(s, AV_LOG_ERROR, "Realloc buf fail.\n");
+            return;
+        }
         s->pb->short_seek_threshold = FFMAX(s->pb->short_seek_threshold, pos_delta/2);
     }
 
