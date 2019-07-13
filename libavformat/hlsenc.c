@@ -42,6 +42,7 @@
 #include "libavutil/opt.h"
 #include "libavutil/log.h"
 #include "libavutil/time_internal.h"
+#include "libavutil/time.h"
 
 #include "avformat.h"
 #include "avio_internal.h"
@@ -2745,11 +2746,9 @@ static int hls_init(AVFormatContext *s)
                    "Disabling 'independent_segments' flag\n");
         }
 
-        if (hls->flags & HLS_PROGRAM_DATE_TIME) {
-            time_t now0;
-            time(&now0);
-            vs->initial_prog_date_time = now0;
-        }
+        if (hls->flags & HLS_PROGRAM_DATE_TIME)
+            vs->initial_prog_date_time = av_gettime() * 0.000001; // microseconds to seconds
+
         if (hls->format_options_str) {
             ret = av_dict_parse_string(&hls->format_options, hls->format_options_str, "=", ":", 0);
             if (ret < 0) {
