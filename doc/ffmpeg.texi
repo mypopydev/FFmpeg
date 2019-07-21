@@ -1515,6 +1515,8 @@ Enable bitexact mode for (de)muxer and (de/en)coder
 Finish encoding when the shortest input stream ends.
 @item -dts_delta_threshold
 Timestamp discontinuity delta threshold.
+@item -dts_error_threshold
+Timestamp error delta threshold.
 @item -muxdelay @var{seconds} (@emph{output})
 Set the maximum demux-decode delay.
 @item -muxpreload @var{seconds} (@emph{output})
