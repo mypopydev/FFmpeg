@@ -4762,6 +4762,7 @@ static int mov_read_trun(MOVContext *c, AVIOContext *pb, MOVAtom atom)
             dts = frag_stream_info->tfdt_dts - sc->time_offset;
             av_log(c->fc, AV_LOG_DEBUG, "found tfdt time %"PRId64
                     ", using it for dts\n", dts);
+            frag_stream_info->tfdt_dts = AV_NOPTS_VALUE;
         } else {
             dts = sc->track_end - sc->time_offset;
             av_log(c->fc, AV_LOG_DEBUG, "found track end time %"PRId64
