@@ -1227,11 +1227,9 @@ int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt)
     for (;; ) {
         AVPacket opkt;
         int ret = interleave_packet(s, &opkt, pkt, flush);
-        if (pkt) {
-            memset(pkt, 0, sizeof(*pkt));
-            av_init_packet(pkt);
+        if (pkt)
             pkt = NULL;
-        }
+
         if (ret <= 0) //FIXME cleanup needed for ret<0 ?
             return ret;
 
