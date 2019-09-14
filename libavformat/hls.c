@@ -1378,7 +1378,7 @@ static int read_data(void *opaque, uint8_t *buf, int buf_size)
 {
     struct playlist *v = opaque;
     HLSContext *c = v->parent->priv_data;
-    int ret;
+    int ret = 0;
     int just_opened = 0;
     int reload_count = 0;
     struct segment *seg;
@@ -1407,7 +1407,7 @@ restart:
 reload:
         reload_count++;
         if (reload_count > c->max_reload)
-            return AVERROR_EOF;
+            return ret < 0 ? ret : AVERROR_EOF;
         if (!v->finished &&
             av_gettime_relative() - v->last_load_time >= reload_interval) {
             if ((ret = parse_playlist(c, v->url, v, NULL)) < 0) {
