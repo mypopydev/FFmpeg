@@ -135,7 +135,7 @@ static int aac_adtstoasc_init(AVBSFContext *ctx)
     if (ctx->par_in->extradata) {
         MPEG4AudioConfig mp4ac = {0};
         int ret = avpriv_mpeg4audio_get_config(&mp4ac, ctx->par_in->extradata,
-                                               ctx->par_in->extradata_size * 8, 1);
+                                               ctx->par_in->extradata_size * 8, 1, ctx);
         if (ret < 0) {
             av_log(ctx, AV_LOG_ERROR, "Error parsing AudioSpecificConfig extradata!\n");
             return ret;
