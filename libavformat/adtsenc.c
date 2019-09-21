@@ -49,7 +49,7 @@ static int adts_decode_extradata(AVFormatContext *s, ADTSContext *adts, const ui
 {
     GetBitContext gb;
     PutBitContext pb;
-    MPEG4AudioConfig m4ac;
+    MPEG4AudioConfig m4ac = {0};
     int off;
 
     init_get_bits(&gb, buf, size * 8);
