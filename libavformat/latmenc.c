@@ -55,7 +55,7 @@ static const AVClass latm_muxer_class = {
 
 static int latm_decode_extradata(LATMContext *ctx, uint8_t *buf, int size)
 {
-    MPEG4AudioConfig m4ac;
+    MPEG4AudioConfig m4ac = {0};
 
     if (size > MAX_EXTRADATA_SIZE) {
         av_log(ctx, AV_LOG_ERROR, "Extradata is larger than currently supported.\n");
