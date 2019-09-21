@@ -714,7 +714,7 @@ static int put_flac_codecpriv(AVFormatContext *s,
 static int get_aac_sample_rates(AVFormatContext *s, uint8_t *extradata, int extradata_size,
                                 int *sample_rate, int *output_sample_rate)
 {
-    MPEG4AudioConfig mp4ac;
+    MPEG4AudioConfig mp4ac = {0};
     int ret;
 
     ret = avpriv_mpeg4audio_get_config(&mp4ac, extradata,
