@@ -1843,7 +1843,7 @@ static av_cold int decode_close_mp3on4(AVCodecContext * avctx)
 static av_cold int decode_init_mp3on4(AVCodecContext * avctx)
 {
     MP3On4DecodeContext *s = avctx->priv_data;
-    MPEG4AudioConfig cfg;
+    MPEG4AudioConfig cfg = {0};
     int i;
 
     if ((avctx->extradata_size < 2) || !avctx->extradata) {
