@@ -548,7 +548,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
         if (st->codecpar->codec_id == AV_CODEC_ID_AAC) {
             MPEG4AudioConfig cfg = {0};
             ret = avpriv_mpeg4audio_get_config(&cfg, st->codecpar->extradata,
-                                               st->codecpar->extradata_size * 8, 1);
+                                               st->codecpar->extradata_size * 8, 1, fc);
             if (ret < 0)
                 return ret;
             st->codecpar->channels = cfg.channels;
