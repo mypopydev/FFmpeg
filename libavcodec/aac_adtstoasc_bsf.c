@@ -133,7 +133,7 @@ static int aac_adtstoasc_init(AVBSFContext *ctx)
 {
     /* Validate the extradata if the stream is already MPEG-4 AudioSpecificConfig */
     if (ctx->par_in->extradata) {
-        MPEG4AudioConfig mp4ac;
+        MPEG4AudioConfig mp4ac = {0};
         int ret = avpriv_mpeg4audio_get_config(&mp4ac, ctx->par_in->extradata,
                                                ctx->par_in->extradata_size * 8, 1);
         if (ret < 0) {
