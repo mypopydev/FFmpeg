@@ -53,10 +53,11 @@ extern const uint8_t ff_mpeg4audio_channels[8];
  * @param[in] c        MPEG4AudioConfig structure to fill.
  * @param[in] gb       Extradata from container.
  * @param[in] sync_extension look for a sync extension after config if true.
- * @return On error -1 is returned, on success AudioSpecificConfig bit index in extradata.
+ * @param[in] logctx   logging context
+ * @return >= 0 On success AudioSpecificConfig bit index in extradata, error code otherwise.
  */
 int ff_mpeg4audio_get_config_gb(MPEG4AudioConfig *c, GetBitContext *gb,
-                                int sync_extension);
+                                int sync_extension, void *logctx);
 
 /**
  * Parse MPEG-4 systems extradata from a raw buffer to retrieve audio configuration.
@@ -64,10 +65,11 @@ int ff_mpeg4audio_get_config_gb(MPEG4AudioConfig *c, GetBitContext *gb,
  * @param[in] buf      Extradata from container.
  * @param[in] bit_size Extradata size in bits.
  * @param[in] sync_extension look for a sync extension after config if true.
- * @return On error -1 is returned, on success AudioSpecificConfig bit index in extradata.
+ * @param[in] logctx   logging context
+ * @return  >= 0 On success AudioSpecificConfig bit index in extradata, error code otherwise.
  */
 int avpriv_mpeg4audio_get_config(MPEG4AudioConfig *c, const uint8_t *buf,
-                                 int bit_size, int sync_extension);
+                                 int bit_size, int sync_extension, void *logctx);
 
 enum AudioObjectType {
     AOT_NULL,
