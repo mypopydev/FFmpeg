@@ -61,7 +61,7 @@ static int latm_decode_extradata(LATMContext *ctx, uint8_t *buf, int size)
         av_log(ctx, AV_LOG_ERROR, "Extradata is larger than currently supported.\n");
         return AVERROR_INVALIDDATA;
     }
-    ctx->off = avpriv_mpeg4audio_get_config(&m4ac, buf, size * 8, 1);
+    ctx->off = avpriv_mpeg4audio_get_config(&m4ac, buf, size * 8, 1, ctx);
     if (ctx->off < 0)
         return ctx->off;
 
