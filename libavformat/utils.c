@@ -2977,6 +2977,16 @@ static void estimate_timings(AVFormatContext *ic, int64_t old_offset)
     {
         int i;
         AVStream av_unused *st;
+        const char *duration_method;
+        struct duration_mode {
+            enum AVDurationEstimationMethod mode;
+            const char *name; ///< short name for the duration estimation method
+        };
+        struct duration_mode duration_modes[] = {
+            { AVFMT_DURATION_FROM_PTS,    "pts"       },
+            { AVFMT_DURATION_FROM_STREAM, "stream"    },
+            { AVFMT_DURATION_FROM_BITRATE,"bit rate"  },
+        };
         for (i = 0; i < ic->nb_streams; i++) {
             st = ic->streams[i];
             if (st->time_base.den)
@@ -2984,10 +2994,14 @@ static void estimate_timings(AVFormatContext *ic, int64_t old_offset)
                        (double) st->start_time * av_q2d(st->time_base),
                        (double) st->duration   * av_q2d(st->time_base));
         }
+        for (i = 0; i < FF_ARRAY_ELEMS(duration_modes); i++)
+            if (ic->duration_estimation_method == duration_modes[i].mode)
+                duration_method = duration_modes[i].name;
         av_log(ic, AV_LOG_TRACE,
-                "format: start_time: %0.3f duration: %0.3f bitrate=%"PRId64" kb/s\n",
+                "format: start_time: %0.3f duration: %0.3f (estimate from %s) bitrate=%"PRId64" kb/s\n",
                 (double) ic->start_time / AV_TIME_BASE,
                 (double) ic->duration   / AV_TIME_BASE,
+                duration_method,
                 (int64_t)ic->bit_rate / 1000);
     }
 }
