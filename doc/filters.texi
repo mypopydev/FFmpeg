@@ -17597,6 +17597,21 @@ Interpolate) pixel art scaling algorithm.
 
 Useful for enlarging pixel art images without reducing sharpness.
 
+@section superfastblur
+
+Blur the input image with super fast blur algorithm, multiple invocations of this
+filter with a small radius will approximate a gaussian blur quite well.
+
+This filter accepts the following options:
+
+@table @option
+@item radius
+@item r
+Set the blurring box radius. The option value must be a int number in
+the range [1, 10] that specifies the blur box size of the superfast blur filter
+used to blur the image. Default value is @code{2}..
+@end table
+
 @section swaprect
 
 Swap two rectangular objects in video.
