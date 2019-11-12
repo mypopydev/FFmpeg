@@ -17269,6 +17269,28 @@ ffmpeg -i main.mpg -i ref.mkv -lavfi  "[0:v]settb=AVTB,setpts=PTS-STARTPTS[main]
 @end example
 @end itemize
 
+@section stackblur
+
+Blur the input image with stack blur algorithm, this is a compromise between Gaussian Blur
+and Box blur, It creates much better looking blurs than Box Blur, but is faster
+than the Gaussian Blur.
+
+Called it stack blur because this describes best how this filter works internally: it creates
+a kind of moving stack of colors whilst scanning through the image. Thereby it
+just has to add one new block of color to the right side of the stack and remove the
+leftmost color. The remaining colors on the topmost layer of the stack are either added on
+or reduced by one, depending on if they are on the right or on the left side of the stack.
+
+This filter accepts the following options:
+
+@table @option
+@item radius
+@item r
+Set the blurring box radius. The option value must be a int number in
+the range [1, 179] that specifies the blur box size of the stack blur filter
+used to blur the image. Default value is @code{2}.
+@end table
+
 @section stereo3d
 
 Convert between different stereoscopic image formats.

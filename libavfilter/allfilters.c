@@ -374,6 +374,7 @@ extern AVFilter ff_vf_split;
 extern AVFilter ff_vf_spp;
 extern AVFilter ff_vf_sr;
 extern AVFilter ff_vf_ssim;
+extern AVFilter ff_vf_stackblur;
 extern AVFilter ff_vf_stereo3d;
 extern AVFilter ff_vf_streamselect;
 extern AVFilter ff_vf_subtitles;
