@@ -76,13 +76,36 @@ static uint8_t const stackblur_shr[255] = {
 typedef struct StackBlurContext {
     const AVClass *class;
 
+    int nb_planes;
+    int planewidth[3];
+    int planeheight[3];
+    int planelinesize[3];
+
+    int is_rgb;
+
     int radius;
 
-    uint32_t *vMIN;
-    uint8_t *rgb;
-    uint8_t *dv;
+    int div;       // 2 * s->radius + 1;
 
-    int *stack;
+    uint8_t *stack[3]; // one stack per planar
+
+    void (*horiz_stackblur)(uint8_t *src,    ///< input image data
+                            int w,	     ///< image width
+                            int linesize,    ///< image linesize
+                            int h,	     ///< image height
+                            int radius,      ///< blur intensity (should be in 2..254 range)
+                            int job_nr,	     ///< total number of working threads
+                            int n_jobs,	     ///< current thread number
+                            uint8_t *stack); ///< stack buffer
+
+    void (*vert_stackblur) (uint8_t *src,    ///< input image data
+                            int w,	     ///< image width
+                            int linesize,    ///< image linesize
+                            int h,	     ///< image height
+                            int radius,      ///< blur intensity (should be in 2..254 range)
+                            int job_nr,	     ///< total number of working threads
+                            int n_jobs,	     ///< current thread number
+                            uint8_t *stack); ///< stack buffer
 } StackBlurContext;
 
 #define OFFSET(x) offsetof(StackBlurContext, x)
@@ -95,23 +118,19 @@ static const AVOption stackblur_options[] = {
 
 AVFILTER_DEFINE_CLASS(stackblur);
 
+typedef struct ThreadData {
+    uint8_t *src;
+    ptrdiff_t src_linesize;
+    int src_w;
+    int src_h;
+    uint8_t *stack;
+} ThreadData;
+
 static av_cold int init(AVFilterContext *ctx)
 {
     StackBlurContext *s = ctx->priv;
 
-    // This line precalculates a lookup table for all the possible
-    // mean values that can occur. This is to avoid costly division
-    // in the inner loop. On some systems doing the division directly
-    // instead of a doing an array lookup might actually be faster
-    // nowadays.
-    uint32_t div = 2 * s->radius + 1;
-    int divsum = (div + 1) >> 1;
-    divsum *= divsum;
-    s->dv = av_malloc(256 * divsum * sizeof(*s->dv));
-    if (!s->dv)
-        return AVERROR(ENOMEM);
-    for (int i = 0; i < 256 * divsum; i++)
-        s->dv[i] = i / divsum;
+    s->div = 2 * s->radius + 1;
 
     return 0;
 }
@@ -119,13 +138,21 @@ static av_cold int init(AVFilterContext *ctx)
 static int query_formats(AVFilterContext *ctx)
 {
     static const enum AVPixelFormat pix_fmts[] = {
+        // RGB 24 bits
         AV_PIX_FMT_RGB24, AV_PIX_FMT_BGR24,
-
+        // RGB 32 bits
         AV_PIX_FMT_ARGB, AV_PIX_FMT_RGBA,
         AV_PIX_FMT_ABGR, AV_PIX_FMT_BGRA,
         AV_PIX_FMT_0RGB, AV_PIX_FMT_RGB0,
         AV_PIX_FMT_0BGR, AV_PIX_FMT_BGR0,
-
+        // YUV
+        AV_PIX_FMT_YUV410P,  AV_PIX_FMT_YUV411P,
+        AV_PIX_FMT_YUV420P,  AV_PIX_FMT_YUV422P,
+        AV_PIX_FMT_YUV440P,  AV_PIX_FMT_YUV444P,
+        AV_PIX_FMT_YUVJ444P, AV_PIX_FMT_YUVJ440P,
+        AV_PIX_FMT_YUVJ422P, AV_PIX_FMT_YUVJ420P,
+        AV_PIX_FMT_YUVJ411P,
+        AV_PIX_FMT_GRAY8, AV_PIX_FMT_GBRP,
         AV_PIX_FMT_NONE
     };
 
@@ -135,30 +162,14 @@ static int query_formats(AVFilterContext *ctx)
     return ff_set_common_formats(ctx, fmts_list);
 }
 
-static int config_props(AVFilterLink *inlink)
-{
-    AVFilterContext *ctx = inlink->dst;
-    StackBlurContext *s = ctx->priv;
-
-    uint32_t div = 2 * s->radius + 1;
-    uint32_t wh = inlink->w * inlink->h;
-
-    s->rgb   = av_malloc(sizeof(*s->rgb) * wh * 3);
-    s->vMIN  = av_malloc(FFMAX(inlink->w, inlink->h) * sizeof(*s->vMIN));
-    s->stack = av_malloc(div * 3 * sizeof(*s->stack));
-    if (!s->vMIN || !s->rgb || !s->stack)
-        return AVERROR(ENOMEM);
-
-    return 0;
-}
-
 /// Stackblur algorithm body
-static void hstackblur_rgba(uint8_t* src,	///< input image data
+static void hstackblur_rgba(uint8_t *src,	///< input image data
                             int w,	        ///< image width
+                            int linesize,	///< image linesize
                             int h,	        ///< image height
                             int radius,	        ///< blur intensity (should be in 2..254 range)
-                            int cores,		///< total number of working threads
-                            int core,		///< current thread number
+                            int job_nr,		///< total number of working threads
+                            int n_jobs,		///< current thread number
                             uint8_t *stack	///< stack buffer
 				  )
 {
@@ -186,20 +197,19 @@ static void hstackblur_rgba(uint8_t* src,	///< input image data
     uint64_t sum_out_a;
 
     uint32_t wm = w - 1;
-    uint32_t w4 = w * 4;
     uint32_t div = (radius * 2) + 1;
     uint32_t mul_sum = stackblur_mul[radius];
-    uint8_t shr_sum = stackblur_shr[radius];
+    uint8_t shr_sum  = stackblur_shr[radius];
 
-    int minY = core * h / cores;
-    int maxY = (core + 1) * h / cores;
+    int minY = n_jobs * h / job_nr;
+    int maxY = (n_jobs + 1) * h / job_nr;
 
     for (y = minY; y < maxY; y++) {
         sum_r = sum_g = sum_b = sum_a =
      sum_in_r = sum_in_g = sum_in_b = sum_in_a =
     sum_out_r = sum_out_g = sum_out_b = sum_out_a = 0;
 
-        src_ptr = src + w4 * y; // start of line (0,y)
+        src_ptr = src + linesize * y; // start of line (0, y)
 
         for(i = 0; i <= radius; i++) {
             stack_ptr    = &stack[ 4 * i ];
@@ -243,8 +253,8 @@ static void hstackblur_rgba(uint8_t* src,	///< input image data
         sp = radius;
         xp = radius;
         if (xp > wm) xp = wm;
-        src_ptr = src + 4 * (xp + y * w); // img.pix_ptr(xp, y);
-        dst_ptr = src + y * w4;           // img.pix_ptr(0, y);
+        src_ptr = src + 4 * xp + y * linesize;  // pixel(xp, y);
+        dst_ptr = src + y * linesize;           // pixel(0,  y);
         for (x = 0; x < w; x++) {
             dst_ptr[0] = (sum_r * mul_sum) >> shr_sum;
             dst_ptr[1] = (sum_g * mul_sum) >> shr_sum;
@@ -306,10 +316,11 @@ static void hstackblur_rgba(uint8_t* src,	///< input image data
 /// Stackblur algorithm body
 static void vstackblur_rgba(uint8_t *src,	///< input image data
                             int w,	        ///< image width
+                            int linesize,	///< image linesize
                             int h,	        ///< image height
                             int radius,	        ///< blur intensity (should be in 2..254 range)
-                            int cores,		///< total number of working threads
-                            int core,		///< current thread number
+                            int job_nr,		///< total number of working threads
+                            int n_jobs,		///< current thread number
                             uint8_t *stack	///< stack buffer
 				  )
 {
@@ -337,20 +348,19 @@ static void vstackblur_rgba(uint8_t *src,	///< input image data
     uint64_t sum_out_a;
 
     uint32_t hm = h - 1;
-    uint32_t w4 = w * 4;
     uint32_t div = (radius * 2) + 1;
     uint32_t mul_sum = stackblur_mul[radius];
     uint8_t shr_sum  = stackblur_shr[radius];
 
-    int minX = core * w / cores;
-    int maxX = (core + 1) * w / cores;
+    int minX = n_jobs * w / job_nr;
+    int maxX = (n_jobs + 1) * w / job_nr;
 
     for (x = minX; x < maxX; x++) {
         sum_r =	sum_g =	sum_b = sum_a =
      sum_in_r = sum_in_g = sum_in_b = sum_in_a =
     sum_out_r = sum_out_g = sum_out_b = sum_out_a = 0;
 
-        src_ptr = src + 4 * x; // x,0
+        src_ptr = src + 4 * x; // pixel(x, 0)
         for (i = 0; i <= radius; i++) {
             stack_ptr    = &stack[i * 4];
             stack_ptr[0] = src_ptr[0];
@@ -369,7 +379,7 @@ static void vstackblur_rgba(uint8_t *src,	///< input image data
             sum_out_a       += src_ptr[3];
         }
         for (i = 1; i <= radius; i++) {
-            if (i <= hm) src_ptr += w4; // +stride
+            if (i <= hm) src_ptr += linesize; // +stride
 
             stack_ptr = &stack[4 * (i + radius)];
             stack_ptr[0] = src_ptr[0];
@@ -391,14 +401,14 @@ static void vstackblur_rgba(uint8_t *src,	///< input image data
         sp = radius;
         yp = radius;
         if (yp > hm) yp = hm;
-        src_ptr = src + 4 * (x + yp * w); // img.pix_ptr(x, yp);
-        dst_ptr = src + 4 * x; 	          // img.pix_ptr(x, 0);
+        src_ptr = src + 4 * x + yp * linesize; // pixel(x, yp);
+        dst_ptr = src + 4 * x; 	               // pixel(x, 0);
         for (y = 0; y < h; y++) {
             dst_ptr[0] = (sum_r * mul_sum) >> shr_sum;
             dst_ptr[1] = (sum_g * mul_sum) >> shr_sum;
             dst_ptr[2] = (sum_b * mul_sum) >> shr_sum;
             dst_ptr[3] = (sum_a * mul_sum) >> shr_sum;
-            dst_ptr += w4;
+            dst_ptr += linesize;
 
             sum_r -= sum_out_r;
             sum_g -= sum_out_g;
@@ -415,7 +425,7 @@ static void vstackblur_rgba(uint8_t *src,	///< input image data
             sum_out_a -= stack_ptr[3];
 
             if (yp < hm) {
-                src_ptr += w4; // stride
+                src_ptr += linesize; // +stride
                 ++yp;
             }
 
@@ -453,11 +463,12 @@ static void vstackblur_rgba(uint8_t *src,	///< input image data
 
 static void hstackblur_rgb(uint8_t* src,	///< input image data
                            int w,	        ///< image width
+                           int linesize,	///< image linesize
                            int h,	        ///< image height
                            int radius,	        ///< blur intensity (should be in 2..254 range)
-                           int cores,		///< total number of working threads
-                           int core,		///< current thread number
-                           uint8_t* stack	///< stack buffer
+                           int job_nr,		///< total number of working threads
+                           int n_jobs,		///< current thread number
+                           uint8_t *stack	///< stack buffer
 				  )
 {
     uint32_t x, y, xp, i;
@@ -481,20 +492,19 @@ static void hstackblur_rgb(uint8_t* src,	///< input image data
     uint64_t sum_out_b;
 
     uint32_t wm = w - 1;
-    uint32_t w3 = w * 3;
     uint32_t div = (radius * 2) + 1;
     uint32_t mul_sum = stackblur_mul[radius];
     uint8_t shr_sum = stackblur_shr[radius];
 
-    int minY = core * h / cores;
-    int maxY = (core + 1) * h / cores;
+    int minY = n_jobs * h / job_nr;
+    int maxY = (n_jobs + 1) * h / job_nr;
 
     for (y = minY; y < maxY; y++) {
         sum_r = sum_g = sum_b =
      sum_in_r = sum_in_g = sum_in_b =
     sum_out_r = sum_out_g = sum_out_b = 0;
 
-        src_ptr = src + w3 * y; // start of line (0,y)
+        src_ptr = src + linesize * y; // start of line (0, y)
 
         for(i = 0; i <= radius; i++) {
             stack_ptr    = &stack[ 3 * i ];
@@ -532,8 +542,8 @@ static void hstackblur_rgb(uint8_t* src,	///< input image data
         sp = radius;
         xp = radius;
         if (xp > wm) xp = wm;
-        src_ptr = src + 3 * (xp + y * w); // img.pix_ptr(xp, y);
-        dst_ptr = src + y * w3;           // img.pix_ptr(0, y);
+        src_ptr = src + 3 * xp + y * linesize; // pixel(xp, y);
+        dst_ptr = src + y * linesize;          // pixel(0,  y);
         for (x = 0; x < w; x++) {
             dst_ptr[0] = (sum_r * mul_sum) >> shr_sum;
             dst_ptr[1] = (sum_g * mul_sum) >> shr_sum;
@@ -587,10 +597,11 @@ static void hstackblur_rgb(uint8_t* src,	///< input image data
 /// Stackblur algorithm body
 static void vstackblur_rgb(uint8_t *src,	///< input image data
                            int w,	        ///< image width
+                           int linesize,	///< image linesize
                            int h,	        ///< image height
                            int radius,	        ///< blur intensity (should be in 2..254 range)
-                           int cores,		///< total number of working threads
-                           int core,		///< current thread number
+                           int job_nr,		///< total number of working threads
+                           int n_jobs,		///< current thread number
                            uint8_t *stack	///< stack buffer
 				  )
 {
@@ -614,22 +625,20 @@ static void vstackblur_rgb(uint8_t *src,	///< input image data
     uint64_t sum_out_g;
     uint64_t sum_out_b;
 
-
     uint32_t hm = h - 1;
-    uint32_t w3 = w * 3;
     uint32_t div = (radius * 2) + 1;
     uint32_t mul_sum = stackblur_mul[radius];
     uint8_t shr_sum  = stackblur_shr[radius];
 
-    int minX = core * w / cores;
-    int maxX = (core + 1) * w / cores;
+    int minX = n_jobs * w / job_nr;
+    int maxX = (n_jobs + 1) * w / job_nr;
 
     for (x = minX; x < maxX; x++) {
         sum_r =	sum_g =	sum_b =
      sum_in_r = sum_in_g = sum_in_b =
     sum_out_r = sum_out_g = sum_out_b = 0;
 
-        src_ptr = src + 3 * x; // x,0
+        src_ptr = src + 3 * x; // pixel(x, 0)
         for (i = 0; i <= radius; i++) {
             stack_ptr    = &stack[i * 3];
             stack_ptr[0] = src_ptr[0];
@@ -645,7 +654,7 @@ static void vstackblur_rgb(uint8_t *src,	///< input image data
             sum_out_b       += src_ptr[2];
         }
         for (i = 1; i <= radius; i++) {
-            if (i <= hm) src_ptr += w3; // +stride
+            if (i <= hm) src_ptr += linesize; // +stride
 
             stack_ptr = &stack[3 * (i + radius)];
             stack_ptr[0] = src_ptr[0];
@@ -664,13 +673,13 @@ static void vstackblur_rgb(uint8_t *src,	///< input image data
         sp = radius;
         yp = radius;
         if (yp > hm) yp = hm;
-        src_ptr = src + 3 * (x + yp * w); // img.pix_ptr(x, yp);
-        dst_ptr = src + 3 * x; 	          // img.pix_ptr(x, 0);
+        src_ptr = src + 3 * x + yp * linesize; // pixel(x, yp);
+        dst_ptr = src + 3 * x; 	               // pixel(x, 0);
         for (y = 0; y < h; y++) {
             dst_ptr[0] = (sum_r * mul_sum) >> shr_sum;
             dst_ptr[1] = (sum_g * mul_sum) >> shr_sum;
             dst_ptr[2] = (sum_b * mul_sum) >> shr_sum;
-            dst_ptr += w3;
+            dst_ptr += linesize;
 
             sum_r -= sum_out_r;
             sum_g -= sum_out_g;
@@ -685,7 +694,7 @@ static void vstackblur_rgb(uint8_t *src,	///< input image data
             sum_out_b -= stack_ptr[2];
 
             if (yp < hm) {
-                src_ptr += w3; // stride
+                src_ptr += linesize; // +stride
                 ++yp;
             }
 
@@ -716,13 +725,14 @@ static void vstackblur_rgb(uint8_t *src,	///< input image data
     }
 }
 
-static void hstackblur_yuv(uint8_t* src,	///< input image data
+static void hstackblur_yuv(uint8_t *src,	///< input image data
                            int w,	        ///< image width
+                           int linesize,	///< image linesize
                            int h,	        ///< image height
                            int radius,	        ///< blur intensity (should be in 2..254 range)
-                           int cores,		///< total number of working threads
-                           int core,		///< current thread number
-                           uint8_t* stack	///< stack buffer
+                           int job_nr,		///< total number of working threads
+                           int n_jobs,		///< current thread number
+                           uint8_t *stack	///< stack buffer
 				  )
 {
     uint32_t x, y, xp, i;
@@ -733,35 +743,33 @@ static void hstackblur_yuv(uint8_t* src,	///< input image data
     uint8_t *src_ptr;
     uint8_t *dst_ptr;
 
-    uint64_t sum_r;
+    uint64_t sum;
 
-    uint64_t sum_in_r;
+    uint64_t sum_in;
 
-    uint64_t sum_out_r;
+    uint64_t sum_out;
 
     uint32_t wm = w - 1;
-    uint32_t w1 = w * 1;
     uint32_t div = (radius * 2) + 1;
     uint32_t mul_sum = stackblur_mul[radius];
     uint8_t shr_sum  = stackblur_shr[radius];
 
-    int minY = core * h / cores;
-    int maxY = (core + 1) * h / cores;
+    int minY = n_jobs * h / job_nr;
+    int maxY = (n_jobs + 1) * h / job_nr;
 
     for (y = minY; y < maxY; y++) {
-        sum_r = sum_in_r = sum_out_r = 0;
+        sum = sum_in = sum_out = 0;
 
-        src_ptr = src + w1 * y; // start of line (0,y)
+        src_ptr = src + linesize * y; // start of line (0, y)
 
         for(i = 0; i <= radius; i++) {
             stack_ptr    = &stack[ i ];
 
             stack_ptr[0] = src_ptr[0];
 
+            sum += src_ptr[0] * (i + 1);
 
-            sum_r += src_ptr[0] * (i + 1);
-
-            sum_out_r += src_ptr[0];
+            sum_out += src_ptr[0];
         }
 
         for (i = 1; i <= radius; i++) {
@@ -770,27 +778,27 @@ static void hstackblur_yuv(uint8_t* src,	///< input image data
 
             stack_ptr[0] = src_ptr[0];
 
-            sum_r += src_ptr[0] * (radius + 1 - i);
+            sum += src_ptr[0] * (radius + 1 - i);
 
-            sum_in_r += src_ptr[0];
+            sum_in += src_ptr[0];
         }
 
         sp = radius;
         xp = radius;
         if (xp > wm) xp = wm;
-        src_ptr = src + 1 * (xp + y * w); // img.pix_ptr(xp, y);
-        dst_ptr = src + y * w1;           // img.pix_ptr(0, y);
+        src_ptr = src + xp + y * linesize; // pixel(xp, y);
+        dst_ptr = src + y * linesize;      // pixel(0,  y);
         for (x = 0; x < w; x++) {
-            dst_ptr[0] = (sum_r * mul_sum) >> shr_sum;
+            dst_ptr[0] = (sum * mul_sum) >> shr_sum;
             dst_ptr += 1;
 
-            sum_r -= sum_out_r;
+            sum -= sum_out;
 
             stack_start = sp + div - radius;
             if (stack_start >= div) stack_start -= div;
             stack_ptr = &stack[1 * stack_start];
 
-            sum_out_r -= stack_ptr[0];
+            sum_out -= stack_ptr[0];
 
             if (xp < wm) {
                 src_ptr += 1;
@@ -799,17 +807,17 @@ static void hstackblur_yuv(uint8_t* src,	///< input image data
 
             stack_ptr[0] = src_ptr[0];
 
-            sum_in_r += src_ptr[0];
+            sum_in += src_ptr[0];
 
-            sum_r    += sum_in_r;
+            sum    += sum_in;
 
             ++sp;
             if (sp >= div) sp = 0;
             stack_ptr = &stack[sp];
 
-            sum_out_r += stack_ptr[0];
+            sum_out += stack_ptr[0];
 
-            sum_in_r  -= stack_ptr[0];
+            sum_in  -= stack_ptr[0];
         }
     }
 }
@@ -817,10 +825,11 @@ static void hstackblur_yuv(uint8_t* src,	///< input image data
 /// Stackblur algorithm body
 static void vstackblur_yuv(uint8_t *src,	///< input image data
                            int w,	        ///< image width
+                           int linesize,	///< image linesize
                            int h,	        ///< image height
                            int radius,	        ///< blur intensity (should be in 2..254 range)
-                           int cores,		///< total number of working threads
-                           int core,		///< current thread number
+                           int job_nr,		///< total number of working threads
+                           int n_jobs,		///< current thread number
                            uint8_t *stack	///< stack buffer
 				  )
 {
@@ -832,79 +841,78 @@ static void vstackblur_yuv(uint8_t *src,	///< input image data
     uint8_t *src_ptr;
     uint8_t *dst_ptr;
 
-    uint64_t sum_r;
+    uint64_t sum;
 
-    uint64_t sum_in_r;
+    uint64_t sum_in;
 
-    uint64_t sum_out_r;
+    uint64_t sum_out;
 
     uint32_t hm = h - 1;
-    uint32_t w1 = w * 1;
     uint32_t div = (radius * 2) + 1;
     uint32_t mul_sum = stackblur_mul[radius];
     uint8_t shr_sum  = stackblur_shr[radius];
 
-    int minX = core * w / cores;
-    int maxX = (core + 1) * w / cores;
+    int minX = n_jobs * w / job_nr;
+    int maxX = (n_jobs + 1) * w / job_nr;
 
     for (x = minX; x < maxX; x++) {
-        sum_r = sum_in_r = sum_out_r = 0;
+        sum = sum_in = sum_out = 0;
 
-        src_ptr = src + 1 * x; // x,0
+        src_ptr = src + x; // pixel (x, 0)
         for (i = 0; i <= radius; i++) {
             stack_ptr    = &stack[i];
             stack_ptr[0] = src_ptr[0];
 
-            sum_r           += src_ptr[0] * (i + 1);
+            sum           += src_ptr[0] * (i + 1);
 
-            sum_out_r       += src_ptr[0];
+            sum_out       += src_ptr[0];
         }
         for (i = 1; i <= radius; i++) {
-            if (i <= hm) src_ptr += w1; // +stride
+            if (i <= hm) src_ptr += linesize; // +stride
 
             stack_ptr = &stack[1 * (i + radius)];
             stack_ptr[0] = src_ptr[0];
 
-            sum_r += src_ptr[0] * (radius + 1 - i);
+            sum += src_ptr[0] * (radius + 1 - i);
 
-            sum_in_r += src_ptr[0];
+            sum_in += src_ptr[0];
         }
 
         sp = radius;
         yp = radius;
         if (yp > hm) yp = hm;
-        src_ptr = src + 1 * (x + yp * w); // img.pix_ptr(x, yp);
-        dst_ptr = src + 1 * x; 	          // img.pix_ptr(x, 0);
+        src_ptr = src + x + yp * linesize; // pixel(x, yp);
+        dst_ptr = src + x; 	           // pixel(x, 0);
         for (y = 0; y < h; y++) {
-            dst_ptr[0] = (sum_r * mul_sum) >> shr_sum;
-            dst_ptr += w1;
+            dst_ptr[0] = (sum * mul_sum) >> shr_sum;
+            dst_ptr += linesize;
 
-            sum_r -= sum_out_r;
+            sum -= sum_out;
 
             stack_start = sp + div - radius;
             if (stack_start >= div) stack_start -= div;
             stack_ptr = &stack[1 * stack_start];
 
-            sum_out_r -= stack_ptr[0];
+            sum_out -= stack_ptr[0];
 
             if (yp < hm) {
-                src_ptr += w1; // stride
+                src_ptr += linesize; // +stride
                 ++yp;
             }
 
             stack_ptr[0] = src_ptr[0];
 
-            sum_in_r += src_ptr[0];
+            sum_in += src_ptr[0];
 
-            sum_r    += sum_in_r;
+            sum    += sum_in;
 
             ++sp;
             if (sp >= div) sp = 0;
             stack_ptr = &stack[sp];
 
-            sum_out_r += stack_ptr[0];
+            sum_out += stack_ptr[0];
 
-            sum_in_r  -= stack_ptr[0];
+            sum_in  -= stack_ptr[0];
         }
     }
 }
@@ -928,186 +936,112 @@ static void vstackblur_yuv(uint8_t *src,	///< input image data
 // or reduced by one, depending on if they are on the right or
 // on the left side of the stack.
 //
-static void stack_blur(StackBlurContext *s, uint8_t *pix, int w, int h, int nb_comps)
+
+static int hstackblur_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    uint32_t wm = w - 1;
-    uint32_t hm = h - 1;
-    uint32_t wh = w * h;
+    StackBlurContext *s = ctx->priv;
+    struct ThreadData *td = arg;
 
-    int radius = s->radius;
+    s->horiz_stackblur(td->src,	        ///< input image data
+                       td->src_w,	///< image width
+                       td->src_linesize,///< image linesize
+                       td->src_h,	///< image height
+                       s->radius,       ///< blur intensity (should be in 2..254 range)
+                       nb_jobs,		///< total number of working threads
+                       jobnr,		///< current thread number
+                       td->stack);	///< stack buffer
 
-    uint8_t *rgb = s->rgb;
-    uint8_t *r = rgb;
-    uint8_t *g = rgb + wh;
-    uint8_t *b = rgb + wh * 2;
-    int rsum, gsum, bsum, x, y, i, p, yp, yi, yw;
+    return 0;
+}
 
-    uint32_t stackpointer;
-    uint32_t stackstart;
-    int *sir;
-    int rbs;
-    int r1 = radius + 1;
-    int routsum, goutsum, boutsum;
-    int rinsum, ginsum, binsum;
+static int vstackblur_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+{
+    StackBlurContext *s = ctx->priv;
+    struct ThreadData *td = arg;
 
-    uint32_t div = 2 * radius + 1;
+    s->vert_stackblur(td->src,	        ///< input image data
+                      td->src_w,	///< image width
+                      td->src_linesize,	///< image linesize
+                      td->src_h,	///< image height
+                      s->radius,        ///< blur intensity (should be in 2..254 range)
+                      nb_jobs,		///< total number of working threads
+                      jobnr,		///< current thread number
+                      td->stack);	///< stack buffer
 
-    int(*stack)[3] = (int(*)[3])(s->stack);
-    uint32_t *vMIN = s->vMIN;
-    uint8_t *dv = s->dv;
+    return 0;
+}
 
-    yw = yi = 0;
+static int config_props(AVFilterLink *inlink)
+{
+    AVFilterContext *ctx = inlink->dst;
+    StackBlurContext *s = ctx->priv;
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
+    int div = s->div;
 
-    for (y = 0; y < h; y++) {
-        rinsum = ginsum = binsum = routsum = goutsum = boutsum = rsum = gsum = bsum = 0;
-        for (i = -radius; i <= radius; i++) {
-            p = yi + (FFMIN(wm, FFMAX(i, 0)));
-            sir = stack[i + radius];
-            sir[0] = pix[(p*nb_comps)];
-            sir[1] = pix[(p*nb_comps) + 1];
-            sir[2] = pix[(p*nb_comps) + 2];
+    s->nb_planes = av_pix_fmt_count_planes(inlink->format);
 
-            rbs = r1 - FFABS(i);
-            rsum += sir[0] * rbs;
-            gsum += sir[1] * rbs;
-            bsum += sir[2] * rbs;
-            if (i > 0) {
-                rinsum += sir[0];
-                ginsum += sir[1];
-                binsum += sir[2];
-            } else {
-                routsum += sir[0];
-                goutsum += sir[1];
-                boutsum += sir[2];
-            }
+    switch (inlink->format) {
+    case AV_PIX_FMT_RGB24:
+    case AV_PIX_FMT_BGR24:
+        s->is_rgb = 1;
+        s->stack[0] = av_malloc(div * 3 * sizeof(*s->stack[0]));
+        s->horiz_stackblur = hstackblur_rgb;
+        s->vert_stackblur  = vstackblur_rgb;
+        if (!s->stack[0])
+            return AVERROR(ENOMEM);
+        break;
+
+    case AV_PIX_FMT_ARGB:
+    case AV_PIX_FMT_RGBA:
+    case AV_PIX_FMT_ABGR:
+    case AV_PIX_FMT_BGRA:
+    case AV_PIX_FMT_0RGB:
+    case AV_PIX_FMT_RGB0:
+    case AV_PIX_FMT_0BGR:
+    case AV_PIX_FMT_BGR0:
+        s->is_rgb = 1;
+        s->horiz_stackblur = hstackblur_rgba;
+        s->vert_stackblur  = vstackblur_rgba;
+        s->stack[0] = av_malloc(div * 4 * sizeof(*s->stack[0]));
+        if (!s->stack[0])
+            return AVERROR(ENOMEM);
+        break;
+
+    case AV_PIX_FMT_YUV410P:
+    case AV_PIX_FMT_YUV411P:
+    case AV_PIX_FMT_YUV420P:
+    case AV_PIX_FMT_YUV422P:
+    case AV_PIX_FMT_YUV440P:
+    case AV_PIX_FMT_YUV444P:
+    case AV_PIX_FMT_YUVJ444P:
+    case AV_PIX_FMT_YUVJ440P:
+    case AV_PIX_FMT_YUVJ422P:
+    case AV_PIX_FMT_YUVJ420P:
+    case AV_PIX_FMT_YUVJ411P:
+    case AV_PIX_FMT_GRAY8:
+    case AV_PIX_FMT_GBRP:
+        s->planewidth[1] = s->planewidth[2] =
+                           AV_CEIL_RSHIFT(inlink->w, desc->log2_chroma_w);
+        s->planewidth[0] = inlink->w;
+
+        s->planeheight[1] = s->planeheight[2] =
+                            AV_CEIL_RSHIFT(inlink->h, desc->log2_chroma_h);
+        s->planeheight[0] = inlink->h;
+        s->is_rgb = 0;
+        s->horiz_stackblur = hstackblur_yuv;
+        s->vert_stackblur  = vstackblur_yuv;
+        for (int i = 0; i < s->nb_planes; i++) {
+            s->stack[i] = av_malloc(div * sizeof(*s->stack[i]));
+            if (!s->stack[i])
+                return AVERROR(ENOMEM);
         }
-        stackpointer = radius;
+        break;
 
-        for (x = 0; x < w; x++) {
-            r[yi] = dv[rsum];
-            g[yi] = dv[gsum];
-            b[yi] = dv[bsum];
-
-            rsum -= routsum;
-            gsum -= goutsum;
-            bsum -= boutsum;
-
-            stackstart = stackpointer - radius + div;
-            sir = stack[stackstart % div];
-
-            routsum -= sir[0];
-            goutsum -= sir[1];
-            boutsum -= sir[2];
-
-            if (y == 0)
-                vMIN[x] = FFMIN(x + radius + 1, wm);
-            p = yw + vMIN[x];
-
-            sir[0] = pix[(p*nb_comps)];
-            sir[1] = pix[(p*nb_comps) + 1];
-            sir[2] = pix[(p*nb_comps) + 2];
-            rinsum += sir[0];
-            ginsum += sir[1];
-            binsum += sir[2];
-
-            rsum += rinsum;
-            gsum += ginsum;
-            bsum += binsum;
-
-            stackpointer = (stackpointer + 1) % div;
-            sir = stack[(stackpointer) % div];
-
-            routsum += sir[0];
-            goutsum += sir[1];
-            boutsum += sir[2];
-
-            rinsum -= sir[0];
-            ginsum -= sir[1];
-            binsum -= sir[2];
-
-            yi++;
-        }
-        yw += w;
+    default:
+        break;
     }
 
-    for (x = 0; x < w; x++) {
-        rinsum = ginsum = binsum = routsum = goutsum = boutsum = rsum = gsum = bsum = 0;
-        yp = -radius * w;
-        for (i = -radius; i <= radius; i++) {
-            yi = FFMAX(0, yp) + x;
-
-            sir = stack[i + radius];
-
-            sir[0] = r[yi];
-            sir[1] = g[yi];
-            sir[2] = b[yi];
-
-            rbs = r1 - FFABS(i);
-
-            rsum += r[yi] * rbs;
-            gsum += g[yi] * rbs;
-            bsum += b[yi] * rbs;
-
-            if (i > 0) {
-                rinsum += sir[0];
-                ginsum += sir[1];
-                binsum += sir[2];
-            } else {
-                routsum += sir[0];
-                goutsum += sir[1];
-                boutsum += sir[2];
-            }
-
-            if (i < hm)
-                yp += w;
-        }
-        yi = x;
-        stackpointer = radius;
-        for (y = 0; y < h; y++) {
-            pix[(yi*nb_comps)]     = dv[rsum];
-            pix[(yi*nb_comps) + 1] = dv[gsum];
-            pix[(yi*nb_comps) + 2] = dv[bsum];
-            rsum -= routsum;
-            gsum -= goutsum;
-            bsum -= boutsum;
-
-            stackstart = stackpointer - radius + div;
-            sir = stack[stackstart % div];
-
-            routsum -= sir[0];
-            goutsum -= sir[1];
-            boutsum -= sir[2];
-
-            if (x == 0)
-                vMIN[y] = FFMIN(y + r1, hm) * w;
-            p = x + vMIN[y];
-
-            sir[0] = r[p];
-            sir[1] = g[p];
-            sir[2] = b[p];
-
-            rinsum += sir[0];
-            ginsum += sir[1];
-            binsum += sir[2];
-
-            rsum += rinsum;
-            gsum += ginsum;
-            bsum += binsum;
-
-            stackpointer = (stackpointer + 1) % div;
-            sir = stack[stackpointer];
-
-            routsum += sir[0];
-            goutsum += sir[1];
-            boutsum += sir[2];
-
-            rinsum -= sir[0];
-            ginsum -= sir[1];
-            binsum -= sir[2];
-
-            yi += w;
-        }
-    }
+    return 0;
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
@@ -1115,21 +1049,51 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = inlink->dst;
     StackBlurContext *s = ctx->priv;
     AVFilterLink *outlink = ctx->outputs[0];
-    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
 
-    stack_blur(s, in->data[0], inlink->w, inlink->h, desc->nb_components);
+    AVFrame *out;
+    int plane;
 
-    return ff_filter_frame(outlink, in);
+    if (av_frame_is_writable(in)) {
+        out = in;
+    } else {
+        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+        if (!out) {
+            av_frame_free(&in);
+            return AVERROR(ENOMEM);
+        }
+        av_frame_copy_props(out, in);
+    }
+
+    for (plane = 0; plane < s->nb_planes; plane++) {
+        const int width  = s->planewidth[plane];
+        const int height = s->planeheight[plane];
+        const int linesize = out->linesize[plane];
+        const int nb_threads = ff_filter_get_nb_threads(ctx);
+
+        ThreadData td;
+
+        td.src = out->data[plane];
+        td.src_w = width;
+        td.src_h = height;
+        td.src_linesize = linesize;
+        td.stack = s->stack[plane];
+
+        ctx->internal->execute(ctx, hstackblur_slice, &td, NULL, FFMIN(height, nb_threads));
+        ctx->internal->execute(ctx, vstackblur_slice, &td, NULL, FFMIN(width,  nb_threads));
+    }
+
+    if (out != in)
+        av_frame_free(&in);
+    return ff_filter_frame(outlink, out);
 }
 
 static av_cold void uninit(AVFilterContext *ctx)
 {
     StackBlurContext *s = ctx->priv;
 
-    av_freep(&s->rgb);
-    av_freep(&s->vMIN);
-    av_freep(&s->dv);
-    av_freep(&s->stack);
+    av_freep(&s->stack[0]);
+    av_freep(&s->stack[1]);
+    av_freep(&s->stack[2]);
 }
 
 static const AVFilterPad stackblur_inputs[] = {
@@ -1160,5 +1124,5 @@ AVFilter ff_vf_stackblur = {
     .inputs        = stackblur_inputs,
     .outputs       = stackblur_outputs,
     .priv_class    = &stackblur_class,
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
+    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
 };
