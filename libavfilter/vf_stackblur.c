@@ -120,6 +120,12 @@ static int query_formats(AVFilterContext *ctx)
 {
     static const enum AVPixelFormat pix_fmts[] = {
         AV_PIX_FMT_RGB24, AV_PIX_FMT_BGR24,
+
+        AV_PIX_FMT_ARGB, AV_PIX_FMT_RGBA,
+        AV_PIX_FMT_ABGR, AV_PIX_FMT_BGRA,
+        AV_PIX_FMT_0RGB, AV_PIX_FMT_RGB0,
+        AV_PIX_FMT_0BGR, AV_PIX_FMT_BGR0,
+
         AV_PIX_FMT_NONE
     };
 
@@ -147,13 +153,13 @@ static int config_props(AVFilterLink *inlink)
 }
 
 /// Stackblur algorithm body
-static void vstackblur_rgba(uint8_t* src,	///< input image data
+static void hstackblur_rgba(uint8_t* src,	///< input image data
                             int w,	        ///< image width
                             int h,	        ///< image height
                             int radius,	        ///< blur intensity (should be in 2..254 range)
                             int cores,		///< total number of working threads
                             int core,		///< current thread number
-                            uint8_t* stack	///< stack buffer
+                            uint8_t *stack	///< stack buffer
 				  )
 {
     uint32_t x, y, xp, i;
@@ -168,10 +174,12 @@ static void vstackblur_rgba(uint8_t* src,	///< input image data
     uint64_t sum_g;
     uint64_t sum_b;
     uint64_t sum_a;
+
     uint64_t sum_in_r;
     uint64_t sum_in_g;
     uint64_t sum_in_b;
     uint64_t sum_in_a;
+
     uint64_t sum_out_r;
     uint64_t sum_out_g;
     uint64_t sum_out_b;
@@ -186,7 +194,7 @@ static void vstackblur_rgba(uint8_t* src,	///< input image data
     int minY = core * h / cores;
     int maxY = (core + 1) * h / cores;
 
-    for(y = minY; y < maxY; y++) {
+    for (y = minY; y < maxY; y++) {
         sum_r = sum_g = sum_b = sum_a =
      sum_in_r = sum_in_g = sum_in_b = sum_in_a =
     sum_out_r = sum_out_g = sum_out_b = sum_out_a = 0;
@@ -195,31 +203,37 @@ static void vstackblur_rgba(uint8_t* src,	///< input image data
 
         for(i = 0; i <= radius; i++) {
             stack_ptr    = &stack[ 4 * i ];
+
             stack_ptr[0] = src_ptr[0];
             stack_ptr[1] = src_ptr[1];
             stack_ptr[2] = src_ptr[2];
             stack_ptr[3] = src_ptr[3];
+
             sum_r += src_ptr[0] * (i + 1);
             sum_g += src_ptr[1] * (i + 1);
             sum_b += src_ptr[2] * (i + 1);
             sum_a += src_ptr[3] * (i + 1);
+
             sum_out_r += src_ptr[0];
             sum_out_g += src_ptr[1];
             sum_out_b += src_ptr[2];
             sum_out_a += src_ptr[3];
         }
 
-        for(i = 1; i <= radius; i++) {
+        for (i = 1; i <= radius; i++) {
             if (i <= wm) src_ptr += 4;
             stack_ptr = &stack[ 4 * (i + radius) ];
+
             stack_ptr[0] = src_ptr[0];
             stack_ptr[1] = src_ptr[1];
             stack_ptr[2] = src_ptr[2];
             stack_ptr[3] = src_ptr[3];
+
             sum_r += src_ptr[0] * (radius + 1 - i);
             sum_g += src_ptr[1] * (radius + 1 - i);
             sum_b += src_ptr[2] * (radius + 1 - i);
             sum_a += src_ptr[3] * (radius + 1 - i);
+
             sum_in_r += src_ptr[0];
             sum_in_g += src_ptr[1];
             sum_in_b += src_ptr[2];
@@ -231,7 +245,7 @@ static void vstackblur_rgba(uint8_t* src,	///< input image data
         if (xp > wm) xp = wm;
         src_ptr = src + 4 * (xp + y * w); // img.pix_ptr(xp, y);
         dst_ptr = src + y * w4;           // img.pix_ptr(0, y);
-        for(x = 0; x < w; x++) {
+        for (x = 0; x < w; x++) {
             dst_ptr[0] = (sum_r * mul_sum) >> shr_sum;
             dst_ptr[1] = (sum_g * mul_sum) >> shr_sum;
             dst_ptr[2] = (sum_b * mul_sum) >> shr_sum;
@@ -252,7 +266,7 @@ static void vstackblur_rgba(uint8_t* src,	///< input image data
             sum_out_b -= stack_ptr[2];
             sum_out_a -= stack_ptr[3];
 
-            if(xp < wm) {
+            if (xp < wm) {
                 src_ptr += 4;
                 ++xp;
             }
@@ -266,6 +280,7 @@ static void vstackblur_rgba(uint8_t* src,	///< input image data
             sum_in_g += src_ptr[1];
             sum_in_b += src_ptr[2];
             sum_in_a += src_ptr[3];
+
             sum_r    += sum_in_r;
             sum_g    += sum_in_g;
             sum_b    += sum_in_b;
@@ -279,6 +294,7 @@ static void vstackblur_rgba(uint8_t* src,	///< input image data
             sum_out_g += stack_ptr[1];
             sum_out_b += stack_ptr[2];
             sum_out_a += stack_ptr[3];
+
             sum_in_r  -= stack_ptr[0];
             sum_in_g  -= stack_ptr[1];
             sum_in_b  -= stack_ptr[2];
@@ -288,13 +304,13 @@ static void vstackblur_rgba(uint8_t* src,	///< input image data
 }
 
 /// Stackblur algorithm body
-static void hstackblur_rgba(uint8_t* src,	///< input image data
+static void vstackblur_rgba(uint8_t *src,	///< input image data
                             int w,	        ///< image width
                             int h,	        ///< image height
                             int radius,	        ///< blur intensity (should be in 2..254 range)
                             int cores,		///< total number of working threads
                             int core,		///< current thread number
-                            uint8_t* stack	///< stack buffer
+                            uint8_t *stack	///< stack buffer
 				  )
 {
     uint32_t x, y, yp, i;
@@ -309,10 +325,12 @@ static void hstackblur_rgba(uint8_t* src,	///< input image data
     uint64_t sum_g;
     uint64_t sum_b;
     uint64_t sum_a;
+
     uint64_t sum_in_r;
     uint64_t sum_in_g;
     uint64_t sum_in_b;
     uint64_t sum_in_a;
+
     uint64_t sum_out_r;
     uint64_t sum_out_g;
     uint64_t sum_out_b;
@@ -327,43 +345,47 @@ static void hstackblur_rgba(uint8_t* src,	///< input image data
     int minX = core * w / cores;
     int maxX = (core + 1) * w / cores;
 
-    for(x = minX; x < maxX; x++) {
-        sum_r =	sum_g =	sum_b =	sum_a =
+    for (x = minX; x < maxX; x++) {
+        sum_r =	sum_g =	sum_b = sum_a =
      sum_in_r = sum_in_g = sum_in_b = sum_in_a =
     sum_out_r = sum_out_g = sum_out_b = sum_out_a = 0;
 
         src_ptr = src + 4 * x; // x,0
-        for(i = 0; i <= radius; i++) {
+        for (i = 0; i <= radius; i++) {
             stack_ptr    = &stack[i * 4];
             stack_ptr[0] = src_ptr[0];
             stack_ptr[1] = src_ptr[1];
             stack_ptr[2] = src_ptr[2];
             stack_ptr[3] = src_ptr[3];
+
             sum_r           += src_ptr[0] * (i + 1);
             sum_g           += src_ptr[1] * (i + 1);
             sum_b           += src_ptr[2] * (i + 1);
             sum_a           += src_ptr[3] * (i + 1);
+
             sum_out_r       += src_ptr[0];
             sum_out_g       += src_ptr[1];
             sum_out_b       += src_ptr[2];
             sum_out_a       += src_ptr[3];
         }
-        for(i = 1; i <= radius; i++) {
-            if(i <= hm) src_ptr += w4; // +stride
+        for (i = 1; i <= radius; i++) {
+            if (i <= hm) src_ptr += w4; // +stride
 
             stack_ptr = &stack[4 * (i + radius)];
             stack_ptr[0] = src_ptr[0];
             stack_ptr[1] = src_ptr[1];
             stack_ptr[2] = src_ptr[2];
             stack_ptr[3] = src_ptr[3];
+
             sum_r += src_ptr[0] * (radius + 1 - i);
             sum_g += src_ptr[1] * (radius + 1 - i);
             sum_b += src_ptr[2] * (radius + 1 - i);
             sum_a += src_ptr[3] * (radius + 1 - i);
+
             sum_in_r += src_ptr[0];
             sum_in_g += src_ptr[1];
             sum_in_b += src_ptr[2];
-            sum_in_a += src_ptr[3];
+            sum_in_a += src_ptr[2];
         }
 
         sp = radius;
@@ -371,7 +393,7 @@ static void hstackblur_rgba(uint8_t* src,	///< input image data
         if (yp > hm) yp = hm;
         src_ptr = src + 4 * (x + yp * w); // img.pix_ptr(x, yp);
         dst_ptr = src + 4 * x; 	          // img.pix_ptr(x, 0);
-        for(y = 0; y < h; y++) {
+        for (y = 0; y < h; y++) {
             dst_ptr[0] = (sum_r * mul_sum) >> shr_sum;
             dst_ptr[1] = (sum_g * mul_sum) >> shr_sum;
             dst_ptr[2] = (sum_b * mul_sum) >> shr_sum;
@@ -384,7 +406,7 @@ static void hstackblur_rgba(uint8_t* src,	///< input image data
             sum_a -= sum_out_a;
 
             stack_start = sp + div - radius;
-            if(stack_start >= div) stack_start -= div;
+            if (stack_start >= div) stack_start -= div;
             stack_ptr = &stack[4 * stack_start];
 
             sum_out_r -= stack_ptr[0];
@@ -392,7 +414,7 @@ static void hstackblur_rgba(uint8_t* src,	///< input image data
             sum_out_b -= stack_ptr[2];
             sum_out_a -= stack_ptr[3];
 
-            if(yp < hm) {
+            if (yp < hm) {
                 src_ptr += w4; // stride
                 ++yp;
             }
@@ -406,6 +428,7 @@ static void hstackblur_rgba(uint8_t* src,	///< input image data
             sum_in_g += src_ptr[1];
             sum_in_b += src_ptr[2];
             sum_in_a += src_ptr[3];
+
             sum_r    += sum_in_r;
             sum_g    += sum_in_g;
             sum_b    += sum_in_b;
@@ -419,10 +442,469 @@ static void hstackblur_rgba(uint8_t* src,	///< input image data
             sum_out_g += stack_ptr[1];
             sum_out_b += stack_ptr[2];
             sum_out_a += stack_ptr[3];
+
             sum_in_r  -= stack_ptr[0];
             sum_in_g  -= stack_ptr[1];
             sum_in_b  -= stack_ptr[2];
             sum_in_a  -= stack_ptr[3];
+        }
+    }
+}
+
+static void hstackblur_rgb(uint8_t* src,	///< input image data
+                           int w,	        ///< image width
+                           int h,	        ///< image height
+                           int radius,	        ///< blur intensity (should be in 2..254 range)
+                           int cores,		///< total number of working threads
+                           int core,		///< current thread number
+                           uint8_t* stack	///< stack buffer
+				  )
+{
+    uint32_t x, y, xp, i;
+    uint32_t sp;
+    uint32_t stack_start;
+    uint8_t *stack_ptr;
+
+    uint8_t *src_ptr;
+    uint8_t *dst_ptr;
+
+    uint64_t sum_r;
+    uint64_t sum_g;
+    uint64_t sum_b;
+
+    uint64_t sum_in_r;
+    uint64_t sum_in_g;
+    uint64_t sum_in_b;
+
+    uint64_t sum_out_r;
+    uint64_t sum_out_g;
+    uint64_t sum_out_b;
+
+    uint32_t wm = w - 1;
+    uint32_t w3 = w * 3;
+    uint32_t div = (radius * 2) + 1;
+    uint32_t mul_sum = stackblur_mul[radius];
+    uint8_t shr_sum = stackblur_shr[radius];
+
+    int minY = core * h / cores;
+    int maxY = (core + 1) * h / cores;
+
+    for (y = minY; y < maxY; y++) {
+        sum_r = sum_g = sum_b =
+     sum_in_r = sum_in_g = sum_in_b =
+    sum_out_r = sum_out_g = sum_out_b = 0;
+
+        src_ptr = src + w3 * y; // start of line (0,y)
+
+        for(i = 0; i <= radius; i++) {
+            stack_ptr    = &stack[ 3 * i ];
+
+            stack_ptr[0] = src_ptr[0];
+            stack_ptr[1] = src_ptr[1];
+            stack_ptr[2] = src_ptr[2];
+
+            sum_r += src_ptr[0] * (i + 1);
+            sum_g += src_ptr[1] * (i + 1);
+            sum_b += src_ptr[2] * (i + 1);
+
+            sum_out_r += src_ptr[0];
+            sum_out_g += src_ptr[1];
+            sum_out_b += src_ptr[2];
+        }
+
+        for (i = 1; i <= radius; i++) {
+            if (i <= wm) src_ptr += 3;
+            stack_ptr = &stack[ 3 * (i + radius) ];
+
+            stack_ptr[0] = src_ptr[0];
+            stack_ptr[1] = src_ptr[1];
+            stack_ptr[2] = src_ptr[2];
+
+            sum_r += src_ptr[0] * (radius + 1 - i);
+            sum_g += src_ptr[1] * (radius + 1 - i);
+            sum_b += src_ptr[2] * (radius + 1 - i);
+
+            sum_in_r += src_ptr[0];
+            sum_in_g += src_ptr[1];
+            sum_in_b += src_ptr[2];
+        }
+
+        sp = radius;
+        xp = radius;
+        if (xp > wm) xp = wm;
+        src_ptr = src + 3 * (xp + y * w); // img.pix_ptr(xp, y);
+        dst_ptr = src + y * w3;           // img.pix_ptr(0, y);
+        for (x = 0; x < w; x++) {
+            dst_ptr[0] = (sum_r * mul_sum) >> shr_sum;
+            dst_ptr[1] = (sum_g * mul_sum) >> shr_sum;
+            dst_ptr[2] = (sum_b * mul_sum) >> shr_sum;
+            dst_ptr += 3;
+
+            sum_r -= sum_out_r;
+            sum_g -= sum_out_g;
+            sum_b -= sum_out_b;
+
+            stack_start = sp + div - radius;
+            if (stack_start >= div) stack_start -= div;
+            stack_ptr = &stack[3 * stack_start];
+
+            sum_out_r -= stack_ptr[0];
+            sum_out_g -= stack_ptr[1];
+            sum_out_b -= stack_ptr[2];
+
+            if (xp < wm) {
+                src_ptr += 3;
+                ++xp;
+            }
+
+            stack_ptr[0] = src_ptr[0];
+            stack_ptr[1] = src_ptr[1];
+            stack_ptr[2] = src_ptr[2];
+
+            sum_in_r += src_ptr[0];
+            sum_in_g += src_ptr[1];
+            sum_in_b += src_ptr[2];
+
+            sum_r    += sum_in_r;
+            sum_g    += sum_in_g;
+            sum_b    += sum_in_b;
+
+            ++sp;
+            if (sp >= div) sp = 0;
+            stack_ptr = &stack[sp*3];
+
+            sum_out_r += stack_ptr[0];
+            sum_out_g += stack_ptr[1];
+            sum_out_b += stack_ptr[2];
+
+            sum_in_r  -= stack_ptr[0];
+            sum_in_g  -= stack_ptr[1];
+            sum_in_b  -= stack_ptr[2];
+        }
+    }
+}
+
+/// Stackblur algorithm body
+static void vstackblur_rgb(uint8_t *src,	///< input image data
+                           int w,	        ///< image width
+                           int h,	        ///< image height
+                           int radius,	        ///< blur intensity (should be in 2..254 range)
+                           int cores,		///< total number of working threads
+                           int core,		///< current thread number
+                           uint8_t *stack	///< stack buffer
+				  )
+{
+    uint32_t x, y, yp, i;
+    uint32_t sp;
+    uint32_t stack_start;
+    uint8_t *stack_ptr;
+
+    uint8_t *src_ptr;
+    uint8_t *dst_ptr;
+
+    uint64_t sum_r;
+    uint64_t sum_g;
+    uint64_t sum_b;
+
+    uint64_t sum_in_r;
+    uint64_t sum_in_g;
+    uint64_t sum_in_b;
+
+    uint64_t sum_out_r;
+    uint64_t sum_out_g;
+    uint64_t sum_out_b;
+
+
+    uint32_t hm = h - 1;
+    uint32_t w3 = w * 3;
+    uint32_t div = (radius * 2) + 1;
+    uint32_t mul_sum = stackblur_mul[radius];
+    uint8_t shr_sum  = stackblur_shr[radius];
+
+    int minX = core * w / cores;
+    int maxX = (core + 1) * w / cores;
+
+    for (x = minX; x < maxX; x++) {
+        sum_r =	sum_g =	sum_b =
+     sum_in_r = sum_in_g = sum_in_b =
+    sum_out_r = sum_out_g = sum_out_b = 0;
+
+        src_ptr = src + 3 * x; // x,0
+        for (i = 0; i <= radius; i++) {
+            stack_ptr    = &stack[i * 3];
+            stack_ptr[0] = src_ptr[0];
+            stack_ptr[1] = src_ptr[1];
+            stack_ptr[2] = src_ptr[2];
+
+            sum_r           += src_ptr[0] * (i + 1);
+            sum_g           += src_ptr[1] * (i + 1);
+            sum_b           += src_ptr[2] * (i + 1);
+
+            sum_out_r       += src_ptr[0];
+            sum_out_g       += src_ptr[1];
+            sum_out_b       += src_ptr[2];
+        }
+        for (i = 1; i <= radius; i++) {
+            if (i <= hm) src_ptr += w3; // +stride
+
+            stack_ptr = &stack[3 * (i + radius)];
+            stack_ptr[0] = src_ptr[0];
+            stack_ptr[1] = src_ptr[1];
+            stack_ptr[2] = src_ptr[2];
+
+            sum_r += src_ptr[0] * (radius + 1 - i);
+            sum_g += src_ptr[1] * (radius + 1 - i);
+            sum_b += src_ptr[2] * (radius + 1 - i);
+
+            sum_in_r += src_ptr[0];
+            sum_in_g += src_ptr[1];
+            sum_in_b += src_ptr[2];
+        }
+
+        sp = radius;
+        yp = radius;
+        if (yp > hm) yp = hm;
+        src_ptr = src + 3 * (x + yp * w); // img.pix_ptr(x, yp);
+        dst_ptr = src + 3 * x; 	          // img.pix_ptr(x, 0);
+        for (y = 0; y < h; y++) {
+            dst_ptr[0] = (sum_r * mul_sum) >> shr_sum;
+            dst_ptr[1] = (sum_g * mul_sum) >> shr_sum;
+            dst_ptr[2] = (sum_b * mul_sum) >> shr_sum;
+            dst_ptr += w3;
+
+            sum_r -= sum_out_r;
+            sum_g -= sum_out_g;
+            sum_b -= sum_out_b;
+
+            stack_start = sp + div - radius;
+            if (stack_start >= div) stack_start -= div;
+            stack_ptr = &stack[3 * stack_start];
+
+            sum_out_r -= stack_ptr[0];
+            sum_out_g -= stack_ptr[1];
+            sum_out_b -= stack_ptr[2];
+
+            if (yp < hm) {
+                src_ptr += w3; // stride
+                ++yp;
+            }
+
+            stack_ptr[0] = src_ptr[0];
+            stack_ptr[1] = src_ptr[1];
+            stack_ptr[2] = src_ptr[2];
+
+            sum_in_r += src_ptr[0];
+            sum_in_g += src_ptr[1];
+            sum_in_b += src_ptr[2];
+
+            sum_r    += sum_in_r;
+            sum_g    += sum_in_g;
+            sum_b    += sum_in_b;
+
+            ++sp;
+            if (sp >= div) sp = 0;
+            stack_ptr = &stack[sp*3];
+
+            sum_out_r += stack_ptr[0];
+            sum_out_g += stack_ptr[1];
+            sum_out_b += stack_ptr[2];
+
+            sum_in_r  -= stack_ptr[0];
+            sum_in_g  -= stack_ptr[1];
+            sum_in_b  -= stack_ptr[2];
+        }
+    }
+}
+
+static void hstackblur_yuv(uint8_t* src,	///< input image data
+                           int w,	        ///< image width
+                           int h,	        ///< image height
+                           int radius,	        ///< blur intensity (should be in 2..254 range)
+                           int cores,		///< total number of working threads
+                           int core,		///< current thread number
+                           uint8_t* stack	///< stack buffer
+				  )
+{
+    uint32_t x, y, xp, i;
+    uint32_t sp;
+    uint32_t stack_start;
+    uint8_t *stack_ptr;
+
+    uint8_t *src_ptr;
+    uint8_t *dst_ptr;
+
+    uint64_t sum_r;
+
+    uint64_t sum_in_r;
+
+    uint64_t sum_out_r;
+
+    uint32_t wm = w - 1;
+    uint32_t w1 = w * 1;
+    uint32_t div = (radius * 2) + 1;
+    uint32_t mul_sum = stackblur_mul[radius];
+    uint8_t shr_sum  = stackblur_shr[radius];
+
+    int minY = core * h / cores;
+    int maxY = (core + 1) * h / cores;
+
+    for (y = minY; y < maxY; y++) {
+        sum_r = sum_in_r = sum_out_r = 0;
+
+        src_ptr = src + w1 * y; // start of line (0,y)
+
+        for(i = 0; i <= radius; i++) {
+            stack_ptr    = &stack[ i ];
+
+            stack_ptr[0] = src_ptr[0];
+
+
+            sum_r += src_ptr[0] * (i + 1);
+
+            sum_out_r += src_ptr[0];
+        }
+
+        for (i = 1; i <= radius; i++) {
+            if (i <= wm) src_ptr += 1;
+            stack_ptr = &stack[ 1 * (i + radius) ];
+
+            stack_ptr[0] = src_ptr[0];
+
+            sum_r += src_ptr[0] * (radius + 1 - i);
+
+            sum_in_r += src_ptr[0];
+        }
+
+        sp = radius;
+        xp = radius;
+        if (xp > wm) xp = wm;
+        src_ptr = src + 1 * (xp + y * w); // img.pix_ptr(xp, y);
+        dst_ptr = src + y * w1;           // img.pix_ptr(0, y);
+        for (x = 0; x < w; x++) {
+            dst_ptr[0] = (sum_r * mul_sum) >> shr_sum;
+            dst_ptr += 1;
+
+            sum_r -= sum_out_r;
+
+            stack_start = sp + div - radius;
+            if (stack_start >= div) stack_start -= div;
+            stack_ptr = &stack[1 * stack_start];
+
+            sum_out_r -= stack_ptr[0];
+
+            if (xp < wm) {
+                src_ptr += 1;
+                ++xp;
+            }
+
+            stack_ptr[0] = src_ptr[0];
+
+            sum_in_r += src_ptr[0];
+
+            sum_r    += sum_in_r;
+
+            ++sp;
+            if (sp >= div) sp = 0;
+            stack_ptr = &stack[sp];
+
+            sum_out_r += stack_ptr[0];
+
+            sum_in_r  -= stack_ptr[0];
+        }
+    }
+}
+
+/// Stackblur algorithm body
+static void vstackblur_yuv(uint8_t *src,	///< input image data
+                           int w,	        ///< image width
+                           int h,	        ///< image height
+                           int radius,	        ///< blur intensity (should be in 2..254 range)
+                           int cores,		///< total number of working threads
+                           int core,		///< current thread number
+                           uint8_t *stack	///< stack buffer
+				  )
+{
+    uint32_t x, y, yp, i;
+    uint32_t sp;
+    uint32_t stack_start;
+    uint8_t *stack_ptr;
+
+    uint8_t *src_ptr;
+    uint8_t *dst_ptr;
+
+    uint64_t sum_r;
+
+    uint64_t sum_in_r;
+
+    uint64_t sum_out_r;
+
+    uint32_t hm = h - 1;
+    uint32_t w1 = w * 1;
+    uint32_t div = (radius * 2) + 1;
+    uint32_t mul_sum = stackblur_mul[radius];
+    uint8_t shr_sum  = stackblur_shr[radius];
+
+    int minX = core * w / cores;
+    int maxX = (core + 1) * w / cores;
+
+    for (x = minX; x < maxX; x++) {
+        sum_r = sum_in_r = sum_out_r = 0;
+
+        src_ptr = src + 1 * x; // x,0
+        for (i = 0; i <= radius; i++) {
+            stack_ptr    = &stack[i];
+            stack_ptr[0] = src_ptr[0];
+
+            sum_r           += src_ptr[0] * (i + 1);
+
+            sum_out_r       += src_ptr[0];
+        }
+        for (i = 1; i <= radius; i++) {
+            if (i <= hm) src_ptr += w1; // +stride
+
+            stack_ptr = &stack[1 * (i + radius)];
+            stack_ptr[0] = src_ptr[0];
+
+            sum_r += src_ptr[0] * (radius + 1 - i);
+
+            sum_in_r += src_ptr[0];
+        }
+
+        sp = radius;
+        yp = radius;
+        if (yp > hm) yp = hm;
+        src_ptr = src + 1 * (x + yp * w); // img.pix_ptr(x, yp);
+        dst_ptr = src + 1 * x; 	          // img.pix_ptr(x, 0);
+        for (y = 0; y < h; y++) {
+            dst_ptr[0] = (sum_r * mul_sum) >> shr_sum;
+            dst_ptr += w1;
+
+            sum_r -= sum_out_r;
+
+            stack_start = sp + div - radius;
+            if (stack_start >= div) stack_start -= div;
+            stack_ptr = &stack[1 * stack_start];
+
+            sum_out_r -= stack_ptr[0];
+
+            if (yp < hm) {
+                src_ptr += w1; // stride
+                ++yp;
+            }
+
+            stack_ptr[0] = src_ptr[0];
+
+            sum_in_r += src_ptr[0];
+
+            sum_r    += sum_in_r;
+
+            ++sp;
+            if (sp >= div) sp = 0;
+            stack_ptr = &stack[sp];
+
+            sum_out_r += stack_ptr[0];
+
+            sum_in_r  -= stack_ptr[0];
         }
     }
 }
