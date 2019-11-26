@@ -24,7 +24,28 @@
  *
  * Stack Blur Algorithm by Mario Klingemann <mario@quasimondo.com>
  *
- * @see http://incubator.quasimondo.com/processing/stackblur.pde
+ * @see http://quasimondo.com/StackBlurForCanvas/StackBlur.js
+ *
+ * StackBlur - a fast almost Gaussian Blur For Canvas
+ *
+ * Version: 	0.5
+ * Author:	Mario Klingemann
+ * Contact: 	mario@quasimondo.com
+ * Website:	http://www.quasimondo.com/StackBlurForCanvas
+ * Twitter:	@quasimondo
+ *
+ * This is a compromise between Gaussian Blur and Box blur
+ * It creates much better looking blurs than Box Blur, but is faster
+ * than the Gaussian Blur implementation.
+ *
+ * Called it Stack Blur because this describes best how this
+ * filter works internally: it creates a kind of moving stack
+ * of colors whilst scanning through the image. Thereby it
+ * just has to add one new block of color to the right side
+ * of the stack and remove the leftmost color. The remaining
+ * colors on the topmost layer of the stack are either added on
+ * or reduced by one, depending on if they are on the right or
+ * on the left side of the stack.
  */
 
 #include "libavutil/avassert.h"
@@ -77,25 +98,21 @@ typedef struct StackBlurContext {
     const AVClass *class;
 
     int nb_planes;
-    int planewidth[3];
-    int planeheight[3];
-    int planelinesize[3];
-
-    int is_rgb;
+    int depth;
+    int planewidth[4];
+    int planeheight[4];
 
     int radius;
 
     int div;       // 2 * s->radius + 1;
 
-    uint8_t *stack[3]; // one stack per planar
+    uint8_t *stack;
 
     void (*horiz_stackblur)(uint8_t *src,    ///< input image data
                             int w,	     ///< image width
                             int linesize,    ///< image linesize
                             int h,	     ///< image height
                             int radius,      ///< blur intensity (should be in 2..254 range)
-                            int job_nr,	     ///< total number of working threads
-                            int n_jobs,	     ///< current thread number
                             uint8_t *stack); ///< stack buffer
 
     void (*vert_stackblur) (uint8_t *src,    ///< input image data
@@ -103,8 +120,6 @@ typedef struct StackBlurContext {
                             int linesize,    ///< image linesize
                             int h,	     ///< image height
                             int radius,      ///< blur intensity (should be in 2..254 range)
-                            int job_nr,	     ///< total number of working threads
-                            int n_jobs,	     ///< current thread number
                             uint8_t *stack); ///< stack buffer
 } StackBlurContext;
 
@@ -117,14 +132,6 @@ static const AVOption stackblur_options[] = {
 };
 
 AVFILTER_DEFINE_CLASS(stackblur);
-
-typedef struct ThreadData {
-    uint8_t *src;
-    ptrdiff_t src_linesize;
-    int src_w;
-    int src_h;
-    uint8_t *stack;
-} ThreadData;
 
 static av_cold int init(AVFilterContext *ctx)
 {
@@ -162,14 +169,11 @@ static int query_formats(AVFilterContext *ctx)
     return ff_set_common_formats(ctx, fmts_list);
 }
 
-/// Stackblur algorithm body
 static void hstackblur_rgba(uint8_t *src,	///< input image data
                             int w,	        ///< image width
                             int linesize,	///< image linesize
                             int h,	        ///< image height
                             int radius,	        ///< blur intensity (should be in 2..254 range)
-                            int job_nr,		///< total number of working threads
-                            int n_jobs,		///< current thread number
                             uint8_t *stack	///< stack buffer
 				  )
 {
@@ -201,10 +205,7 @@ static void hstackblur_rgba(uint8_t *src,	///< input image data
     uint32_t mul_sum = stackblur_mul[radius];
     uint8_t shr_sum  = stackblur_shr[radius];
 
-    int minY = n_jobs * h / job_nr;
-    int maxY = (n_jobs + 1) * h / job_nr;
-
-    for (y = minY; y < maxY; y++) {
+    for (y = 0; y < h; y++) {
         sum_r = sum_g = sum_b = sum_a =
      sum_in_r = sum_in_g = sum_in_b = sum_in_a =
     sum_out_r = sum_out_g = sum_out_b = sum_out_a = 0;
@@ -313,14 +314,11 @@ static void hstackblur_rgba(uint8_t *src,	///< input image data
     }
 }
 
-/// Stackblur algorithm body
 static void vstackblur_rgba(uint8_t *src,	///< input image data
                             int w,	        ///< image width
                             int linesize,	///< image linesize
                             int h,	        ///< image height
                             int radius,	        ///< blur intensity (should be in 2..254 range)
-                            int job_nr,		///< total number of working threads
-                            int n_jobs,		///< current thread number
                             uint8_t *stack	///< stack buffer
 				  )
 {
@@ -352,10 +350,7 @@ static void vstackblur_rgba(uint8_t *src,	///< input image data
     uint32_t mul_sum = stackblur_mul[radius];
     uint8_t shr_sum  = stackblur_shr[radius];
 
-    int minX = n_jobs * w / job_nr;
-    int maxX = (n_jobs + 1) * w / job_nr;
-
-    for (x = minX; x < maxX; x++) {
+    for (x = 0; x < w; x++) {
         sum_r =	sum_g =	sum_b = sum_a =
      sum_in_r = sum_in_g = sum_in_b = sum_in_a =
     sum_out_r = sum_out_g = sum_out_b = sum_out_a = 0;
@@ -466,8 +461,6 @@ static void hstackblur_rgb(uint8_t* src,	///< input image data
                            int linesize,	///< image linesize
                            int h,	        ///< image height
                            int radius,	        ///< blur intensity (should be in 2..254 range)
-                           int job_nr,		///< total number of working threads
-                           int n_jobs,		///< current thread number
                            uint8_t *stack	///< stack buffer
 				  )
 {
@@ -496,10 +489,7 @@ static void hstackblur_rgb(uint8_t* src,	///< input image data
     uint32_t mul_sum = stackblur_mul[radius];
     uint8_t shr_sum = stackblur_shr[radius];
 
-    int minY = n_jobs * h / job_nr;
-    int maxY = (n_jobs + 1) * h / job_nr;
-
-    for (y = minY; y < maxY; y++) {
+    for (y = 0; y < h; y++) {
         sum_r = sum_g = sum_b =
      sum_in_r = sum_in_g = sum_in_b =
     sum_out_r = sum_out_g = sum_out_b = 0;
@@ -594,14 +584,11 @@ static void hstackblur_rgb(uint8_t* src,	///< input image data
     }
 }
 
-/// Stackblur algorithm body
 static void vstackblur_rgb(uint8_t *src,	///< input image data
                            int w,	        ///< image width
                            int linesize,	///< image linesize
                            int h,	        ///< image height
                            int radius,	        ///< blur intensity (should be in 2..254 range)
-                           int job_nr,		///< total number of working threads
-                           int n_jobs,		///< current thread number
                            uint8_t *stack	///< stack buffer
 				  )
 {
@@ -630,10 +617,7 @@ static void vstackblur_rgb(uint8_t *src,	///< input image data
     uint32_t mul_sum = stackblur_mul[radius];
     uint8_t shr_sum  = stackblur_shr[radius];
 
-    int minX = n_jobs * w / job_nr;
-    int maxX = (n_jobs + 1) * w / job_nr;
-
-    for (x = minX; x < maxX; x++) {
+    for (x = 0; x < w; x++) {
         sum_r =	sum_g =	sum_b =
      sum_in_r = sum_in_g = sum_in_b =
     sum_out_r = sum_out_g = sum_out_b = 0;
@@ -725,14 +709,12 @@ static void vstackblur_rgb(uint8_t *src,	///< input image data
     }
 }
 
-static void hstackblur_yuv(uint8_t *src,	///< input image data
-                           int w,	        ///< image width
-                           int linesize,	///< image linesize
-                           int h,	        ///< image height
-                           int radius,	        ///< blur intensity (should be in 2..254 range)
-                           int job_nr,		///< total number of working threads
-                           int n_jobs,		///< current thread number
-                           uint8_t *stack	///< stack buffer
+static void hstackblur_y(uint8_t *src,	///< input image data
+                         int w,	        ///< image width
+                         int linesize,	///< image linesize
+                         int h,	        ///< image height
+                         int radius,	///< blur intensity (should be in 2..254 range)
+                         uint8_t *stack	///< stack buffer
 				  )
 {
     uint32_t x, y, xp, i;
@@ -744,9 +726,7 @@ static void hstackblur_yuv(uint8_t *src,	///< input image data
     uint8_t *dst_ptr;
 
     uint64_t sum;
-
     uint64_t sum_in;
-
     uint64_t sum_out;
 
     uint32_t wm = w - 1;
@@ -754,10 +734,7 @@ static void hstackblur_yuv(uint8_t *src,	///< input image data
     uint32_t mul_sum = stackblur_mul[radius];
     uint8_t shr_sum  = stackblur_shr[radius];
 
-    int minY = n_jobs * h / job_nr;
-    int maxY = (n_jobs + 1) * h / job_nr;
-
-    for (y = minY; y < maxY; y++) {
+    for (y = 0; y < h; y++) {
         sum = sum_in = sum_out = 0;
 
         src_ptr = src + linesize * y; // start of line (0, y)
@@ -796,7 +773,7 @@ static void hstackblur_yuv(uint8_t *src,	///< input image data
 
             stack_start = sp + div - radius;
             if (stack_start >= div) stack_start -= div;
-            stack_ptr = &stack[1 * stack_start];
+            stack_ptr = &stack[stack_start];
 
             sum_out -= stack_ptr[0];
 
@@ -822,15 +799,12 @@ static void hstackblur_yuv(uint8_t *src,	///< input image data
     }
 }
 
-/// Stackblur algorithm body
-static void vstackblur_yuv(uint8_t *src,	///< input image data
-                           int w,	        ///< image width
-                           int linesize,	///< image linesize
-                           int h,	        ///< image height
-                           int radius,	        ///< blur intensity (should be in 2..254 range)
-                           int job_nr,		///< total number of working threads
-                           int n_jobs,		///< current thread number
-                           uint8_t *stack	///< stack buffer
+static void vstackblur_y(uint8_t *src,	///< input image data
+                         int w,	        ///< image width
+                         int linesize,	///< image linesize
+                         int h,	        ///< image height
+                         int radius,	///< blur intensity (should be in 2..254 range)
+                         uint8_t *stack	///< stack buffer
 				  )
 {
     uint32_t x, y, yp, i;
@@ -842,9 +816,7 @@ static void vstackblur_yuv(uint8_t *src,	///< input image data
     uint8_t *dst_ptr;
 
     uint64_t sum;
-
     uint64_t sum_in;
-
     uint64_t sum_out;
 
     uint32_t hm = h - 1;
@@ -852,10 +824,7 @@ static void vstackblur_yuv(uint8_t *src,	///< input image data
     uint32_t mul_sum = stackblur_mul[radius];
     uint8_t shr_sum  = stackblur_shr[radius];
 
-    int minX = n_jobs * w / job_nr;
-    int maxX = (n_jobs + 1) * w / job_nr;
-
-    for (x = minX; x < maxX; x++) {
+    for (x = 0; x < w; x++) {
         sum = sum_in = sum_out = 0;
 
         src_ptr = src + x; // pixel (x, 0)
@@ -891,7 +860,7 @@ static void vstackblur_yuv(uint8_t *src,	///< input image data
 
             stack_start = sp + div - radius;
             if (stack_start >= div) stack_start -= div;
-            stack_ptr = &stack[1 * stack_start];
+            stack_ptr = &stack[stack_start];
 
             sum_out -= stack_ptr[0];
 
@@ -917,60 +886,6 @@ static void vstackblur_yuv(uint8_t *src,	///< input image data
     }
 }
 
-// Stack Blur v1.0
-//
-// Author: Mario Klingemann <mario@quasimondo.com>
-// http://incubator.quasimondo.com
-// created Feburary 29, 2004
-//
-// This is a compromise between Gaussian Blur and Box blur
-// It creates much better looking blurs than Box Blur, but is faster
-// than the Gaussian Blur implementation.
-//
-// Called it Stack Blur because this describes best how this
-// filter works internally: it creates a kind of moving stack
-// of colors whilst scanning through the image. Thereby it
-// just has to add one new block of color to the right side
-// of the stack and remove the leftmost color. The remaining
-// colors on the topmost layer of the stack are either added on
-// or reduced by one, depending on if they are on the right or
-// on the left side of the stack.
-//
-
-static int hstackblur_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    StackBlurContext *s = ctx->priv;
-    struct ThreadData *td = arg;
-
-    s->horiz_stackblur(td->src,	        ///< input image data
-                       td->src_w,	///< image width
-                       td->src_linesize,///< image linesize
-                       td->src_h,	///< image height
-                       s->radius,       ///< blur intensity (should be in 2..254 range)
-                       nb_jobs,		///< total number of working threads
-                       jobnr,		///< current thread number
-                       td->stack);	///< stack buffer
-
-    return 0;
-}
-
-static int vstackblur_slice(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
-{
-    StackBlurContext *s = ctx->priv;
-    struct ThreadData *td = arg;
-
-    s->vert_stackblur(td->src,	        ///< input image data
-                      td->src_w,	///< image width
-                      td->src_linesize,	///< image linesize
-                      td->src_h,	///< image height
-                      s->radius,        ///< blur intensity (should be in 2..254 range)
-                      nb_jobs,		///< total number of working threads
-                      jobnr,		///< current thread number
-                      td->stack);	///< stack buffer
-
-    return 0;
-}
-
 static int config_props(AVFilterLink *inlink)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -979,15 +894,19 @@ static int config_props(AVFilterLink *inlink)
     int div = s->div;
 
     s->nb_planes = av_pix_fmt_count_planes(inlink->format);
+    s->depth = desc->comp[0].depth;
+    s->planewidth[1] = s->planewidth[2] = AV_CEIL_RSHIFT(inlink->w, desc->log2_chroma_w);
+    s->planewidth[0] = s->planewidth[3] = inlink->w;
+    s->planeheight[1] = s->planeheight[2] = AV_CEIL_RSHIFT(inlink->h, desc->log2_chroma_h);
+    s->planeheight[0] = s->planeheight[3] = inlink->h;
 
     switch (inlink->format) {
     case AV_PIX_FMT_RGB24:
     case AV_PIX_FMT_BGR24:
-        s->is_rgb = 1;
-        s->stack[0] = av_malloc(div * 3 * sizeof(*s->stack[0]));
         s->horiz_stackblur = hstackblur_rgb;
         s->vert_stackblur  = vstackblur_rgb;
-        if (!s->stack[0])
+        s->stack = av_mallocz(div * 3 * sizeof(*s->stack));
+        if (!s->stack)
             return AVERROR(ENOMEM);
         break;
 
@@ -999,11 +918,10 @@ static int config_props(AVFilterLink *inlink)
     case AV_PIX_FMT_RGB0:
     case AV_PIX_FMT_0BGR:
     case AV_PIX_FMT_BGR0:
-        s->is_rgb = 1;
         s->horiz_stackblur = hstackblur_rgba;
         s->vert_stackblur  = vstackblur_rgba;
-        s->stack[0] = av_malloc(div * 4 * sizeof(*s->stack[0]));
-        if (!s->stack[0])
+        s->stack = av_mallocz(div * 4 * sizeof(*s->stack));
+        if (!s->stack)
             return AVERROR(ENOMEM);
         break;
 
@@ -1020,21 +938,11 @@ static int config_props(AVFilterLink *inlink)
     case AV_PIX_FMT_YUVJ411P:
     case AV_PIX_FMT_GRAY8:
     case AV_PIX_FMT_GBRP:
-        s->planewidth[1] = s->planewidth[2] =
-                           AV_CEIL_RSHIFT(inlink->w, desc->log2_chroma_w);
-        s->planewidth[0] = inlink->w;
-
-        s->planeheight[1] = s->planeheight[2] =
-                            AV_CEIL_RSHIFT(inlink->h, desc->log2_chroma_h);
-        s->planeheight[0] = inlink->h;
-        s->is_rgb = 0;
-        s->horiz_stackblur = hstackblur_yuv;
-        s->vert_stackblur  = vstackblur_yuv;
-        for (int i = 0; i < s->nb_planes; i++) {
-            s->stack[i] = av_malloc(div * sizeof(*s->stack[i]));
-            if (!s->stack[i])
-                return AVERROR(ENOMEM);
-        }
+        s->horiz_stackblur = hstackblur_y;
+        s->vert_stackblur  = vstackblur_y;
+        s->stack = av_mallocz(div * sizeof(*s->stack));
+        if (!s->stack)
+            return AVERROR(ENOMEM);
         break;
 
     default:
@@ -1065,22 +973,28 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
 
     for (plane = 0; plane < s->nb_planes; plane++) {
-        const int width  = s->planewidth[plane];
         const int height = s->planeheight[plane];
-        const int linesize = out->linesize[plane];
-        const int nb_threads = ff_filter_get_nb_threads(ctx);
+        const int width = s->planewidth[plane];
 
-        ThreadData td;
-
-        td.src = out->data[plane];
-        td.src_w = width;
-        td.src_h = height;
-        td.src_linesize = linesize;
-        td.stack = s->stack[plane];
-
-        ctx->internal->execute(ctx, hstackblur_slice, &td, NULL, FFMIN(height, nb_threads));
-        ctx->internal->execute(ctx, vstackblur_slice, &td, NULL, FFMIN(width,  nb_threads));
+        if (out != in)
+            av_image_copy_plane(out->data[plane], out->linesize[plane],
+                                in->data[plane], in->linesize[plane],
+                                width * ((s->depth + 7) / 8), height);
     }
+
+    s->horiz_stackblur(out->data[0],    ///< input image data
+                       out->width,	///< image width
+                       out->linesize[0],///< image linesize
+                       out->height,	///< image height
+                       s->radius,       ///< blur intensity (should be in 2..254 range)
+                       s->stack);	///< stack buffer
+
+    s->vert_stackblur(out->data[0],	///< input image data
+                      out->width,	///< image width
+                      out->linesize[0], ///< image linesize
+                      out->height,	///< image height
+                      s->radius,        ///< blur intensity (should be in 2..254 range)
+                      s->stack);	///< stack buffer
 
     if (out != in)
         av_frame_free(&in);
@@ -1091,9 +1005,7 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     StackBlurContext *s = ctx->priv;
 
-    av_freep(&s->stack[0]);
-    av_freep(&s->stack[1]);
-    av_freep(&s->stack[2]);
+    av_freep(&s->stack);
 }
 
 static const AVFilterPad stackblur_inputs[] = {
@@ -1124,5 +1036,5 @@ AVFilter ff_vf_stackblur = {
     .inputs        = stackblur_inputs,
     .outputs       = stackblur_outputs,
     .priv_class    = &stackblur_class,
-    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
+    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };
