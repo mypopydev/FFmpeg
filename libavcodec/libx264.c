@@ -867,6 +867,11 @@ FF_ENABLE_DEPRECATION_WARNINGS
     x4->params.vui.b_fullrange = avctx->pix_fmt == AV_PIX_FMT_YUVJ420P ||
                                  avctx->pix_fmt == AV_PIX_FMT_YUVJ422P ||
                                  avctx->pix_fmt == AV_PIX_FMT_YUVJ444P ||
+#if CONFIG_LIBX264RGB_ENCODER
+                                 avctx->pix_fmt == AV_PIX_FMT_BGR0 ||
+                                 avctx->pix_fmt == AV_PIX_FMT_BGR24 ||
+                                 avctx->pix_fmt == AV_PIX_FMT_RGB24 ||
+#endif
                                  avctx->color_range == AVCOL_RANGE_JPEG;
 
     if (avctx->colorspace != AVCOL_SPC_UNSPECIFIED)
