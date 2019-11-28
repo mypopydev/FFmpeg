@@ -294,8 +294,10 @@ static int track_header(VividasDemuxContext *viv, AVFormatContext *s,  uint8_t *
     for (i=0;i<val_1;i++) {
         int c = avio_r8(pb);
         for (j=0;j<c;j++) {
-            if (avio_feof(pb))
+            if (avio_feof(pb)) {
+                av_free(pb);
                 return AVERROR_EOF;
+            }
             avio_r8(pb); // val_3
             avio_r8(pb); // val_4
         }
