@@ -1552,9 +1552,15 @@ static int FUNC(uncompressed_header)(CodedBitstreamContext *ctx, RWContext *rw,
         }
     }
 
-    av_log(ctx->log_ctx, AV_LOG_DEBUG, "Frame %d:  size %dx%d  "
+    av_log(ctx->log_ctx, AV_LOG_DEBUG, "%s Frame %d:  size %dx%d  "
            "upscaled %d  render %dx%d  subsample %dx%d  "
-           "bitdepth %d  tiles %dx%d.\n", current->order_hint,
+           "bitdepth %d  tiles %dx%d.\n",
+#ifdef READ
+           "Read",
+#else
+           "Write",
+#endif
+           current->order_hint,
            priv->frame_width, priv->frame_height, priv->upscaled_width,
            priv->render_width, priv->render_height,
            seq->color_config.subsampling_x + 1,
