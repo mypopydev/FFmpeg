@@ -53,6 +53,7 @@ int main(int argc, char **argv)
             i++;
         } else if (!strcmp(argv[i], "-oi") && i + 1 < argc) {
             if (av_dict_parse_string(&in_opts, argv[i + 1], "=", ":", 0) < 0) {
+                av_dict_free(&in_opts);
                 fprintf(stderr, "Cannot parse option string %s\n",
                         argv[i + 1]);
                 return usage(argv[0], 1);
@@ -60,6 +61,7 @@ int main(int argc, char **argv)
             i++;
         } else if (!strcmp(argv[i], "-oo") && i + 1 < argc) {
             if (av_dict_parse_string(&out_opts, argv[i + 1], "=", ":", 0) < 0) {
+                av_dict_free(&out_opts);
                 fprintf(stderr, "Cannot parse option string %s\n",
                         argv[i + 1]);
                 return usage(argv[0], 1);
