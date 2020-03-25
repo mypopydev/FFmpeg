@@ -6766,6 +6766,37 @@ static int mov_read_dmlp(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     return 0;
 }
 
+static int mov_read_dvcc_dvvc(MOVContext *c, AVIOContext *pb, MOVAtom atom)
+{
+    AVStream *st;
+    uint8_t version_major, version_minor, profile, level;
+    char str_buf[32];
+    uint16_t tmp;
+
+    if (c->fc->nb_streams < 1)
+        return 0;
+    st = c->fc->streams[c->fc->nb_streams-1];
+
+    if ((uint64_t)atom.size > (1<<30) || atom.size < 4)
+        return AVERROR_INVALIDDATA;
+
+    version_major = avio_r8(pb);
+    version_minor = avio_r8(pb);
+
+    tmp = avio_rb16(pb);
+    profile = (tmp >> 9) & 0x7f;    // 7bits
+    level   = (tmp >> 3) & 0x3f;    // 6 bits
+    av_log(c, AV_LOG_DEBUG, "dolby vision stream, version: %d.%d, profile: %d, level: %d\n",
+            version_major, version_minor, profile, level);
+
+    snprintf(str_buf, sizeof(str_buf), "%d", profile);
+    av_dict_set(&st->metadata, "dovi_profile", str_buf, 0);
+    snprintf(str_buf, sizeof(str_buf), "%d", level);
+    av_dict_set(&st->metadata, "dovi_level", str_buf, 0);
+
+    return 0;
+}
+
 static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('A','C','L','R'), mov_read_aclr },
 { MKTAG('A','P','R','G'), mov_read_avid },
@@ -6861,6 +6892,8 @@ static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('v','p','c','C'), mov_read_vpcc },
 { MKTAG('m','d','c','v'), mov_read_mdcv },
 { MKTAG('c','l','l','i'), mov_read_clli },
+{ MKTAG('d','v','c','C'), mov_read_dvcc_dvvc },
+{ MKTAG('d','v','v','C'), mov_read_dvcc_dvvc },
 { 0, NULL }
 };
 
