@@ -1365,6 +1365,7 @@ AVInputFormat ff_flv_demuxer = {
     .read_close     = flv_read_close,
     .extensions     = "flv",
     .priv_class     = &flv_class,
+    .flags          = AVFMT_TS_DISCONT
 };
 
 static const AVClass live_flv_class = {
