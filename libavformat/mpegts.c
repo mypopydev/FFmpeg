@@ -2135,6 +2135,27 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
             st->request_probe        = 0;
         }
         break;
+    case 0xb0: /* dolby vision video stream descriptor*/
+        {
+            int version_major, version_minor, profile, level;
+            char str_buf[32];
+            if (desc_end - *pp < 4) // 8 + 8 + 7 + 6 + 1 + 1 + 1
+                return AVERROR_INVALIDDATA;
+
+            version_major = get8(pp, desc_end);
+            version_minor = get8(pp, desc_end);
+            profile = get16(pp, desc_end);
+            level   = (profile >> 3) & 0x3f;    // 6 bits
+            profile = (profile >> 9) & 0x7f;    // 7 bits
+            av_log(fc, AV_LOG_DEBUG, "dolby vision stream, version: %d.%d, profile: %d, level: %d\n",
+                    version_major, version_minor, profile, level);
+
+            snprintf(str_buf, sizeof(str_buf), "%d", profile);
+            av_dict_set(&st->metadata, "dovi_profile", str_buf, 0);
+            snprintf(str_buf, sizeof(str_buf), "%d", level);
+            av_dict_set(&st->metadata, "dovi_level", str_buf, 0);
+        }
+        break;
     default:
         break;
     }
