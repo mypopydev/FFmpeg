@@ -21,6 +21,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include "libavutil/frame.h"
+
 /**
  * @file
  * API-specific header for AV_HWDEVICE_TYPE_VULKAN.
