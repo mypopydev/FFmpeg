@@ -3118,8 +3118,7 @@ static int init_output_stream_streamcopy(OutputStream *ost)
                          (AVRational){ par_dst->height, par_dst->width });
             av_log(NULL, AV_LOG_WARNING, "Overriding aspect ratio "
                    "with stream copy may produce invalid files\n");
-            }
-        else if (ist->st->sample_aspect_ratio.num)
+        } else if (ist->st->sample_aspect_ratio.num)
             sar = ist->st->sample_aspect_ratio;
         else
             sar = par_src->sample_aspect_ratio;
