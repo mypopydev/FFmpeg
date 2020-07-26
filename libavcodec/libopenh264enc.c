@@ -31,6 +31,7 @@
 
 #include "avcodec.h"
 #include "internal.h"
+#include "packet_internal.h"
 #include "libopenh264.h"
 
 #if !OPENH264_VER_AT_LEAST(1, 6)
@@ -376,6 +377,8 @@ static int svc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     SSourcePicture sp = { 0 };
     int size = 0, layer, first_layer = 0;
     int layer_size[MAX_LAYER_NUM_OF_FRAME] = { 0 };
+    int pict_type;
+    SEncoderStatistics stat = { 0 };
 
     sp.iColorFormat = videoFormatI420;
     for (i = 0; i < 3; i++) {
@@ -426,6 +429,34 @@ static int svc_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     avpkt->pts = frame->pts;
     if (fbi.eFrameType == videoFrameTypeIDR)
         avpkt->flags |= AV_PKT_FLAG_KEY;
+
+    (*s->encoder)->GetOption(s->encoder, ENCODER_OPTION_GET_STATISTICS, &stat);
+    switch (fbi.eFrameType) {
+    case videoFrameTypeIDR:
+    case videoFrameTypeI:
+        pict_type = AV_PICTURE_TYPE_I;
+        break;
+    case videoFrameTypeP:
+        pict_type = AV_PICTURE_TYPE_P;
+        break;
+    default:
+        av_log(avctx, AV_LOG_ERROR, "Unknown picture type encountered.\n");
+        return AVERROR_EXTERNAL;
+    }
+#if FF_API_CODED_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
+    avctx->coded_frame->pict_type = pict_type;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
+
+    ff_side_data_set_encoder_stats(avpkt, stat.uiAverageFrameQP * FF_QP2LAMBDA, NULL, 0, pict_type);
+
+#if FF_API_CODED_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
+    avctx->coded_frame->quality = stat.uiAverageFrameQP * FF_QP2LAMBDA;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
+
     *got_packet = 1;
     return 0;
 }
