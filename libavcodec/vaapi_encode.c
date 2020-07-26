@@ -24,6 +24,7 @@
 #include "libavutil/log.h"
 #include "libavutil/pixdesc.h"
 
+#include "packet_internal.h"
 #include "vaapi_encode.h"
 #include "encode.h"
 #include "avcodec.h"
@@ -633,6 +634,7 @@ static int vaapi_encode_output(AVCodecContext *avctx,
     int total_size = 0;
     uint8_t *ptr;
     int err;
+    int pict_type;
 
     err = vaapi_encode_wait(avctx, pic);
     if (err < 0)
@@ -669,6 +671,28 @@ static int vaapi_encode_output(AVCodecContext *avctx,
         pkt->flags |= AV_PKT_FLAG_KEY;
 
     pkt->pts = pic->pts;
+
+    switch (pic->type) {
+    case PICTURE_TYPE_IDR:
+    case PICTURE_TYPE_I:
+        pict_type = AV_PICTURE_TYPE_I;
+        break;
+    case PICTURE_TYPE_P:
+        pict_type = AV_PICTURE_TYPE_P;
+        break;
+    case PICTURE_TYPE_B:
+        pict_type = AV_PICTURE_TYPE_B;
+        break;
+    default:
+        pict_type = AV_PICTURE_TYPE_NONE;
+        break;
+    }
+#if FF_API_CODED_FRAME
+FF_DISABLE_DEPRECATION_WARNINGS
+    avctx->coded_frame->pict_type = pict_type;
+FF_ENABLE_DEPRECATION_WARNINGS
+#endif
+    ff_side_data_set_encoder_stats(pkt, -1, NULL, 0, pict_type);
 
     vas = vaUnmapBuffer(ctx->hwctx->display, pic->output_buffer);
     if (vas != VA_STATUS_SUCCESS) {
