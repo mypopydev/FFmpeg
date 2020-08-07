@@ -77,6 +77,12 @@ typedef struct MOVDref {
     char volume[28];
     char filename[64];
     int16_t nlvl_to, nlvl_from;
+
+    /*
+     * DataEntryUrlBox
+     */
+    char *location;         /* a location to find the resource with the given name */
+    uint32_t location_len;
 } MOVDref;
 
 typedef struct MOVAtom {
