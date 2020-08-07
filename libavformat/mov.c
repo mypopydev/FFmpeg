@@ -575,6 +575,7 @@ static int mov_read_dref(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     AVStream *st;
     MOVStreamContext *sc;
     int entries, i, j;
+    int flags;
 
     if (c->fc->nb_streams < 1)
         return 0;
@@ -599,18 +600,19 @@ static int mov_read_dref(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         MOVDref *dref = &sc->drefs[i];
         uint32_t size = avio_rb32(pb);
         int64_t next = avio_tell(pb) + size - 4;
+        int ret;
 
         if (size < 12)
             return AVERROR_INVALIDDATA;
 
         dref->type = avio_rl32(pb);
-        avio_rb32(pb); // version + flags
+        avio_r8(pb); /* version */
+        flags = avio_rb24(pb);
 
         if (dref->type == MKTAG('a','l','i','s') && size > 150) {
             /* macintosh alias record */
             uint16_t volume_len, len;
             int16_t type;
-            int ret;
 
             avio_skip(pb, 10);
 
@@ -695,6 +697,24 @@ static int mov_read_dref(MOVContext *c, AVIOContext *pb, MOVAtom atom)
                     av_log(c->fc, AV_LOG_DEBUG, "dir %s\n", dref->dir);
                 } else
                     avio_skip(pb, len);
+            }
+        } else if (dref->type == MKTAG('u','r','l',' ') && size >= 12) {
+            if (flags == 1) {
+                /* do noting when elementray stream in the same file */
+                av_log(c->fc, AV_LOG_TRACE, "media data location in the same file\n");
+            } else {
+                uint32_t len = size - 12;
+                dref->location = av_malloc(len + 1); /* Add null terminator */
+                if (!dref->location)
+                    return AVERROR(ENOMEM);
+
+                ret = ffio_read_size(pb, dref->location, len);
+                if (ret < 0) {
+                    av_freep(&dref->location);
+                    return ret;
+                }
+                dref->location_len = len;
+                dref->location[len] = 0;
             }
         } else {
             av_log(c->fc, AV_LOG_DEBUG, "Unknown dref type 0x%08"PRIx32" size %"PRIu32"\n",
@@ -4169,6 +4189,11 @@ static int mov_open_dref(MOVContext *c, AVIOContext **pb, const char *src, MOVDr
             if (!c->fc->io_open(c->fc, pb, filename, AVIO_FLAG_READ, NULL))
                 return 0;
         }
+    } else if (ref->location) {
+        av_log(c->fc, AV_LOG_WARNING, "Try to open the media file in separate file from %s.\n",
+            ref->location);
+        if (!c->fc->io_open(c->fc, pb, ref->location, AVIO_FLAG_READ, NULL))
+            return 0;
     } else if (c->use_absolute_path) {
         av_log(c->fc, AV_LOG_WARNING, "Using absolute path on user request, "
                "this is a possible security issue\n");
@@ -4243,23 +4268,28 @@ static int mov_read_trak(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     mov_build_index(c, st);
 
-    if (sc->dref_id-1 < sc->drefs_count && sc->drefs[sc->dref_id-1].path) {
+    if (sc->dref_id-1 < sc->drefs_count &&
+        (sc->drefs[sc->dref_id-1].path || sc->drefs[sc->dref_id-1].location)) {
         MOVDref *dref = &sc->drefs[sc->dref_id - 1];
         if (c->enable_drefs) {
             if (mov_open_dref(c, &sc->pb, c->fc->url, dref) < 0)
                 av_log(c->fc, AV_LOG_ERROR,
                        "stream %d, error opening alias: path='%s', dir='%s', "
-                       "filename='%s', volume='%s', nlvl_from=%d, nlvl_to=%d\n",
+                       "filename='%s', volume='%s', nlvl_from=%d, nlvl_to=%d, "
+                       "url : len=%d, location='%s'\n",
                        st->index, dref->path, dref->dir, dref->filename,
-                       dref->volume, dref->nlvl_from, dref->nlvl_to);
+                       dref->volume, dref->nlvl_from, dref->nlvl_to,
+                       dref->location_len, dref->location);
         } else {
             av_log(c->fc, AV_LOG_WARNING,
                    "Skipped opening external track: "
                    "stream %d, alias: path='%s', dir='%s', "
-                   "filename='%s', volume='%s', nlvl_from=%d, nlvl_to=%d."
+                   "filename='%s', volume='%s', nlvl_from=%d, nlvl_to=%d. "
+                   "url : len=%d, location='%s' "
                    "Set enable_drefs to allow this.\n",
                    st->index, dref->path, dref->dir, dref->filename,
-                   dref->volume, dref->nlvl_from, dref->nlvl_to);
+                   dref->volume, dref->nlvl_from, dref->nlvl_to,
+                   dref->location_len, dref->location);
         }
     } else {
         sc->pb = c->fc->pb;
@@ -7318,6 +7348,7 @@ static int mov_read_close(AVFormatContext *s)
         for (j = 0; j < sc->drefs_count; j++) {
             av_freep(&sc->drefs[j].path);
             av_freep(&sc->drefs[j].dir);
+            av_freep(&sc->drefs[j].location);
         }
         av_freep(&sc->drefs);
 
