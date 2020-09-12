@@ -1536,10 +1536,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 
     draw_text(ctx, frame, frame->width, frame->height);
 
-    av_log(ctx, AV_LOG_DEBUG, "n:%d t:%f text_w:%d text_h:%d x:%d y:%d\n",
+    av_log(ctx, AV_LOG_DEBUG, "n:%d t:%f text_w:%d text_h:%d x:%d y:%d reinit:%d\n",
            (int)s->var_values[VAR_N], s->var_values[VAR_T],
            (int)s->var_values[VAR_TEXT_W], (int)s->var_values[VAR_TEXT_H],
-           s->x, s->y);
+           s->x, s->y, s->reinit);
 
     return ff_filter_frame(outlink, frame);
 }
