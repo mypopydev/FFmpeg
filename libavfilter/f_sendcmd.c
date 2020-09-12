@@ -103,14 +103,6 @@ typedef struct SendCmdContext {
 } SendCmdContext;
 
 #define OFFSET(x) offsetof(SendCmdContext, x)
-#define FLAGS AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_VIDEO_PARAM
-static const AVOption options[] = {
-    { "commands", "set commands", OFFSET(commands_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
-    { "c",        "set commands", OFFSET(commands_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
-    { "filename", "set commands file",  OFFSET(commands_filename), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
-    { "f",        "set commands file",  OFFSET(commands_filename), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, FLAGS },
-    { NULL }
-};
 
 #define SPACES " \f\t\n\r"
 
@@ -574,7 +566,14 @@ end:
 
 #if CONFIG_SENDCMD_FILTER
 
-#define sendcmd_options options
+#define VFLAGS AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_VIDEO_PARAM
+static const AVOption sendcmd_options[] = {
+    { "commands", "set commands", OFFSET(commands_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, VFLAGS },
+    { "c",        "set commands", OFFSET(commands_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, VFLAGS },
+    { "filename", "set commands file",  OFFSET(commands_filename), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, VFLAGS },
+    { "f",        "set commands file",  OFFSET(commands_filename), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, VFLAGS },
+    { NULL }
+};
 AVFILTER_DEFINE_CLASS(sendcmd);
 
 static const AVFilterPad sendcmd_inputs[] = {
@@ -609,7 +608,14 @@ AVFilter ff_vf_sendcmd = {
 
 #if CONFIG_ASENDCMD_FILTER
 
-#define asendcmd_options options
+#define AFLAGS AV_OPT_FLAG_FILTERING_PARAM | AV_OPT_FLAG_AUDIO_PARAM
+static const AVOption asendcmd_options[] = {
+    { "commands", "set commands", OFFSET(commands_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, AFLAGS },
+    { "c",        "set commands", OFFSET(commands_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, AFLAGS },
+    { "filename", "set commands file",  OFFSET(commands_filename), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, AFLAGS },
+    { "f",        "set commands file",  OFFSET(commands_filename), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, AFLAGS },
+    { NULL }
+};
 AVFILTER_DEFINE_CLASS(asendcmd);
 
 static const AVFilterPad asendcmd_inputs[] = {
