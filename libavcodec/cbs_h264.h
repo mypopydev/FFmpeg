@@ -318,6 +318,12 @@ typedef struct H264RawSEIAlternativeTransferCharacteristics {
     uint8_t preferred_transfer_characteristics;
 } H264RawSEIAlternativeTransferCharacteristics;
 
+typedef struct H264RawSEITRTCExten {
+    uint8_t     *data;
+    AVBufferRef *data_ref;
+    size_t       data_length;
+} H264RawSEITRTCExten;
+
 typedef struct H264RawSEIPayload {
     uint32_t payload_type;
     uint32_t payload_size;
@@ -333,6 +339,7 @@ typedef struct H264RawSEIPayload {
         H264RawSEIMasteringDisplayColourVolume mastering_display_colour_volume;
         H264RawSEIAlternativeTransferCharacteristics
             alternative_transfer_characteristics;
+        H264RawSEITRTCExten trtc_exten;
         struct {
             uint8_t     *data;
             AVBufferRef *data_ref;

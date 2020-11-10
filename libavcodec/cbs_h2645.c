@@ -1381,6 +1381,9 @@ static void cbs_h264_free_sei_payload(H264RawSEIPayload *payload)
     case H264_SEI_TYPE_USER_DATA_UNREGISTERED:
         av_buffer_unref(&payload->payload.user_data_unregistered.data_ref);
         break;
+    case H264_SEI_TYPE_TRTC_EXTEN:
+        av_buffer_unref(&payload->payload.trtc_exten.data_ref);
+        break;
     default:
         av_buffer_unref(&payload->payload.other.data_ref);
         break;

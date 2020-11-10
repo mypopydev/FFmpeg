@@ -832,6 +832,29 @@ static int FUNC(sei_alternative_transfer_characteristics)(CodedBitstreamContext 
     return 0;
 }
 
+static int FUNC(sei_trtc_exten)(CodedBitstreamContext *ctx, RWContext *rw,
+                                H264RawSEITRTCExten *current,
+                                uint32_t *payload_size)
+{
+    int err, i;
+
+    HEADER("TRTC Exten");
+
+#ifdef READ
+    current->data_length = *payload_size;
+#else
+    *payload_size = current->data_length;
+#endif
+
+
+    allocate(current->data, current->data_length);
+
+    for (i = 0; i < current->data_length; i++)
+        xu(8, trtc_exten_byte[i], current->data[i], 0, 255, 1, i);
+
+    return 0;
+}
+
 static int FUNC(sei_payload)(CodedBitstreamContext *ctx, RWContext *rw,
                              H264RawSEIPayload *current)
 {
@@ -886,6 +909,10 @@ static int FUNC(sei_payload)(CodedBitstreamContext *ctx, RWContext *rw,
     case H264_SEI_TYPE_ALTERNATIVE_TRANSFER:
         CHECK(FUNC(sei_alternative_transfer_characteristics)
               (ctx, rw, &current->payload.alternative_transfer_characteristics));
+        break;
+    case H264_SEI_TYPE_TRTC_EXTEN:
+        CHECK(FUNC(sei_trtc_exten)
+              (ctx, rw, &current->payload.trtc_exten, &current->payload_size));
         break;
     default:
         {

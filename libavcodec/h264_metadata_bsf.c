@@ -21,6 +21,8 @@
 #include "libavutil/common.h"
 #include "libavutil/opt.h"
 
+#include "libavformat/internal.h"
+
 #include "bsf.h"
 #include "bsf_internal.h"
 #include "cbs.h"
@@ -78,6 +80,8 @@ typedef struct H264MetadataContext {
     int crop_bottom;
 
     const char *sei_user_data;
+
+    const char *trtc_exten;
 
     int delete_filler;
 
@@ -410,6 +414,43 @@ static int h264_metadata_filter(AVBSFContext *bsf, AVPacket *pkt)
         }
     }
 
+    // Only insert the TRTC extren SEI in access units containing SPSs
+    if (ctx->trtc_exten && (has_sps || !ctx->done_first_au)) {
+        H264RawSEIPayload payload = {
+            .payload_type = H264_SEI_TYPE_TRTC_EXTEN,
+        };
+        H264RawSEITRTCExten *trtc =
+            &payload.payload.trtc_exten;
+
+        size_t len = strlen(ctx->trtc_exten);
+
+        trtc->data_ref = av_buffer_alloc(len + 1);
+        if (!trtc->data_ref) {
+            err = AVERROR(ENOMEM);
+            goto fail;
+        }
+
+        if (!strncmp(ctx->trtc_exten, "0x", 2) ||
+            !strncmp(ctx->trtc_exten, "0X", 2)) {
+            trtc->data_length =
+                ff_hex_to_data(trtc->data_ref->data, ctx->trtc_exten + 2);
+            trtc->data        = trtc->data_ref->data;
+            payload.payload_size = trtc->data_length;
+        } else {
+            av_log(bsf, AV_LOG_ERROR, "Invalid TRTC extension data: "
+                   "must be \"0x or 0X at begin\".\n");
+            err = AVERROR(EINVAL);
+            goto fail;
+        }
+
+        err = ff_cbs_h264_add_sei_message(au, &payload);
+        if (err < 0) {
+            av_log(bsf, AV_LOG_ERROR, "Failed to add TRTC extension SEI "
+                   "message to access unit.\n");
+            goto fail;
+        }
+    }
+
     // Only insert the SEI in access units containing SPSs, and also
     // unconditionally in the first access unit we ever see.
     if (ctx->sei_user_data && (has_sps || !ctx->done_first_au)) {
@@ -734,6 +775,9 @@ static const AVOption h264_metadata_options[] = {
 
     { "sei_user_data", "Insert SEI user data (UUID+string)",
         OFFSET(sei_user_data), AV_OPT_TYPE_STRING, { .str = NULL }, .flags = FLAGS },
+
+    { "sei_trtc_exten", "Insert SEI TRTC extension (0x or 0X hex)",
+        OFFSET(trtc_exten), AV_OPT_TYPE_STRING, { .str = NULL }, .flags = FLAGS },
 
     { "delete_filler", "Delete all filler (both NAL and SEI)",
         OFFSET(delete_filler), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, FLAGS},
