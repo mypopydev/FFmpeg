@@ -45,7 +45,7 @@ enum CBSContentType {
 enum {
       // Maximum number of unit types described by the same unit type
       // descriptor.
-      CBS_MAX_UNIT_TYPES  = 3,
+      CBS_MAX_UNIT_TYPES  = 8,
       // Maximum number of reference buffer offsets in any one unit.
       CBS_MAX_REF_OFFSETS = 2,
       // Special value used in a unit type descriptor to indicate that it
@@ -209,6 +209,7 @@ int ff_cbs_write_signed(CodedBitstreamContext *ctx, PutBitContext *pbc,
 extern const CodedBitstreamType ff_cbs_type_av1;
 extern const CodedBitstreamType ff_cbs_type_h264;
 extern const CodedBitstreamType ff_cbs_type_h265;
+extern const CodedBitstreamType ff_cbs_type_h266;
 extern const CodedBitstreamType ff_cbs_type_jpeg;
 extern const CodedBitstreamType ff_cbs_type_mpeg2;
 extern const CodedBitstreamType ff_cbs_type_vp9;
