@@ -493,8 +493,9 @@ static int cbs_h2645_fragment_add_nals(CodedBitstreamContext *ctx,
         const H2645NAL *nal = &packet->nals[i];
         AVBufferRef *ref;
         size_t size = nal->size;
+        enum AVCodecID codec_id = ctx->codec->codec_id;
 
-        if (nal->nuh_layer_id > 0)
+        if (codec_id != AV_CODEC_ID_VVC && nal->nuh_layer_id > 0)
             continue;
 
         // Remove trailing zeroes.
