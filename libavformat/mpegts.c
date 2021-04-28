@@ -2207,7 +2207,7 @@ static AVStream *find_matching_stream(MpegTSContext *ts, int pid, unsigned int p
                                       int stream_identifier, int pmt_stream_idx, struct Program *p)
 {
     AVFormatContext *s = ts->stream;
-    int i;
+    int i; // the stream id of the match
     AVStream *found = NULL;
 
     if (stream_identifier) { /* match based on "stream identifier descriptor" if present */
@@ -2218,6 +2218,7 @@ static AVStream *find_matching_stream(MpegTSContext *ts, int pid, unsigned int p
         }
     } else if (pmt_stream_idx < p->nb_streams) { /* match based on position within the PMT */
         found = s->streams[p->streams[pmt_stream_idx].idx];
+        i = pmt_stream_idx;
     }
 
     if (found) {
