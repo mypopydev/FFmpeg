@@ -71,6 +71,8 @@ typedef struct SvtContext {
 
     int tile_columns;
     int tile_rows;
+
+    AVDictionary *svt_av1_params;
 } SvtContext;
 
 static const struct {
@@ -146,11 +148,334 @@ static int alloc_buffer(EbSvtAv1EncConfiguration *config, SvtContext *svt_enc)
 
 }
 
+static void set_asm_type(EbSvtAv1EncConfiguration *p, const char *value)
+{
+    const struct {
+        const char *name;
+        CPU_FLAGS   flags;
+    } param_maps[] = {
+        {"c", 0},
+        {"0", 0},
+
+        {"mmx", (CPU_FLAGS_MMX << 1) - 1},
+        {"1",   (CPU_FLAGS_MMX << 1) - 1},
+
+        {"sse", (CPU_FLAGS_SSE << 1) - 1},
+        {"2",   (CPU_FLAGS_SSE << 1) - 1},
+
+        {"sse2", (CPU_FLAGS_SSE2 << 1) - 1},
+        {"3",    (CPU_FLAGS_SSE2 << 1) - 1},
+
+        {"sse3", (CPU_FLAGS_SSE3 << 1) - 1},
+        {"4",    (CPU_FLAGS_SSE3 << 1) - 1},
+
+        {"ssse3", (CPU_FLAGS_SSSE3 << 1) - 1},
+        {"5",     (CPU_FLAGS_SSSE3 << 1) - 1},
+
+        {"sse4_1", (CPU_FLAGS_SSE4_1 << 1) - 1},
+        {"6",      (CPU_FLAGS_SSE4_1 << 1) - 1},
+
+        {"sse4_2", (CPU_FLAGS_SSE4_2 << 1) - 1},
+        {"7",      (CPU_FLAGS_SSE4_2 << 1) - 1},
+
+        {"avx", (CPU_FLAGS_AVX << 1) - 1},
+        {"8",   (CPU_FLAGS_AVX << 1) - 1},
+
+        {"avx2", (CPU_FLAGS_AVX2 << 1) - 1},
+        {"9",    (CPU_FLAGS_AVX2 << 1) - 1},
+
+        {"avx512", (CPU_FLAGS_AVX512VL << 1) - 1},
+        {"10",     (CPU_FLAGS_AVX512VL << 1) - 1},
+
+        {"max", CPU_FLAGS_ALL},
+        {"11",  CPU_FLAGS_ALL},
+    };
+    const uint32_t para_map_size = FF_ARRAY_ELEMS(param_maps);
+    uint32_t i;
+
+    for (i = 0; i < para_map_size; ++i) {
+        if (strcmp(value, param_maps[i].name) == 0) {
+            p->use_cpu_flags = param_maps[i].flags;
+            return;
+        }
+    }
+
+    p->use_cpu_flags = CPU_FLAGS_INVALID;
+};
+
+static void set_level(EbSvtAv1EncConfiguration *p, const char *value)
+{
+    if (strtoul(value, NULL, 0) != 0 || strcmp(value, "0") == 0)
+        p->level = (uint32_t)(10 * strtod(value, NULL));
+    else
+        p->level = 9999999;
+};
+
+static void set_cfg_crf(EbSvtAv1EncConfiguration *p, const char *value)
+{
+    p->qp = strtoul(value, NULL, 0);
+    p->rate_control_mode = 0;
+    p->enable_tpl_la = 1;
+}
+
+#define SVT_PARAM_BAD_NAME     (-1)
+#define SVT_PARAM_BAD_VALUE    (-2)
+#define SVT_PARAM_ALLOC_FAILED (-3)
+static int svt_param_parse(EbSvtAv1EncConfiguration *p, const char *name, const char *value )
+{
+    char *name_buf = NULL;
+    int b_error = 0;
+    int errortype = SVT_PARAM_BAD_VALUE;
+    int name_was_bool;
+    int value_was_null = !value;
+
+    if (!name)
+        return SVT_PARAM_BAD_NAME;
+    if (!value)
+        value = "true";
+
+    if (value[0] == '=')
+        value++;
+
+    if (strchr(name, '_')) { // s/_/-/g
+        char *c;
+        name_buf = av_strdup(name);
+        if (!name_buf)
+            return SVT_PARAM_ALLOC_FAILED;
+        while ((c = strchr(name_buf, '_')))
+            *c = '-';
+        name = name_buf;
+    }
+
+    name_was_bool = 0;
+
+#define OPT(STR) else if (!strcmp(name, STR))
+#define OPT2(STR0, STR1) else if (!strcmp(name, STR0) || !strcmp(name, STR1))
+    if (0)
+        ;
+    OPT2("preset", "enc-mode")
+        p->enc_mode = (uint8_t)strtoul(value, NULL, 0);
+
+    /*
+     * Encoder Global Options
+     */
+    OPT("pred-struct")
+        p->pred_structure = (uint8_t)strtol(value, NULL, 0);
+
+    OPT("profile")
+        p->profile = strtol(value, NULL, 0);
+    OPT("tier")
+        p->tier = strtol(value, NULL, 0);
+    OPT("level")
+        set_level(p, value);
+
+    OPT("fps") {
+        p->frame_rate = strtoul(value, NULL, 0);
+        if (p->frame_rate <= 1000) {
+            p->frame_rate = p->frame_rate << 16;
+        }
+    }
+    OPT("fps-num")
+        p->frame_rate_numerator = strtoul(value, NULL, 0);
+    OPT("fps-denom")
+        p->frame_rate_denominator = strtoul(value, NULL, 0);
+
+    OPT("hierarchical-levels")
+        p->hierarchical_levels = strtol(value, NULL, 0);
+
+    OPT("asm")
+        set_asm_type(p, value);
+    OPT("lp")
+        p->logical_processors = (uint32_t)strtoul(value, NULL, 0);
+    OPT("unpin")
+        p->unpin = (uint32_t)strtoul(value, NULL, 0);
+    OPT("ss")
+        p->target_socket = (int32_t)strtol(value, NULL, 0);
+
+    /*
+     * Rate Control Options
+     */
+    OPT("rc")
+        p->rate_control_mode = strtoul(value, NULL, 0);
+    OPT("crf")
+        set_cfg_crf(p, value);
+    OPT("max-qp")
+        p->max_qp_allowed = strtoul(value, NULL, 0);
+    OPT("min-qp")
+        p->min_qp_allowed = strtoul(value, NULL, 0);
+    OPT2("q", "qp")
+        p->qp = strtoul(value, NULL, 0);
+    OPT("tbr")
+        p->target_bit_rate = 1000 * strtoul(value, NULL, 0);
+    OPT("vbv-bufsize")
+        p->vbv_bufsize = 1000 * strtoul(value, NULL, 0);
+    OPT("adaptive-quantization")
+        p->enable_adaptive_quantization = (EbBool)strtol(value, NULL, 0);
+    OPT("scd")
+        p->scene_change_detection = strtoul(value, NULL, 0);
+
+    /*
+     * GOP size and type Options
+     */
+    OPT("keyint")
+        p->intra_period_length = strtol(value, NULL, 0);
+    OPT("irefresh-type")
+        p->intra_refresh_type = strtol(value, NULL, 0);
+    OPT2("lad", "lookahead")
+        p->look_ahead_distance = strtoul(value, NULL, 0);
+
+    /*
+     * AV1 Specific Options
+     */
+    OPT("tile-rows")
+        p->tile_rows = (EbBool)strtol(value, NULL, 0);
+    OPT("tile-columns")
+        p->tile_columns = (EbBool)strtol(value, NULL, 0);
+
+    OPT2("dlf", "disable-dlf")
+        p->disable_dlf_flag = strtol(value, NULL, 0);
+    OPT("enable-tpl-la")
+        p->enable_tpl_la = strtol(value, NULL, 0);
+    OPT("cdef-level")
+        p->cdef_level = strtol(value, NULL, 0);
+    OPT2("restoration-filtering", "enable-restoration-filtering")
+        p->enable_restoration_filtering = strtol(value, NULL, 0);
+    OPT("sg-filter-mode")
+        p->sg_filter_mode = strtol(value, NULL, 0);
+    OPT("wn-filter-mode")
+        p->wn_filter_mode = strtol(value, NULL, 0);
+    OPT2("mfmv", "enable-mfmv")
+        p->enable_mfmv = strtol(value, NULL, 0);
+    OPT2("redundant-blk", "enable-redundant-blk")
+        p->enable_redundant_blk = strtol(value, NULL, 0);
+    OPT2("spatial-sse-full-loop-level", "enable-spatial-sse-full-loop-level")
+        p->spatial_sse_full_loop_level = strtol(value, NULL, 0);
+    OPT2("new-nrst-near-comb", "enable-new-nrst-near-comb")
+        p->new_nearest_comb_inject = strtol(value, NULL, 0);
+    OPT2("nsq-table-use", "enable-nsq-table-use")
+        p->nsq_table = strtol(value, NULL, 0);
+    OPT2("framend-cdf-upd-mode", "enable-framend-cdf-upd-mode")
+        p->frame_end_cdf_update = strtol(value, NULL, 0);
+    OPT("chroma-mode")
+        p->set_chroma_mode = strtol(value, NULL, 0);
+    OPT2("dcfl", "disable-cfl")
+        p->disable_cfl_flag = strtol(value, NULL, 0);
+    OPT2("local-warp", "enable-local-warp")
+        p->enable_warped_motion = strtol(value, NULL, 0);
+    OPT2("global-motion", "enable-global-motion")
+        p->enable_global_motion = strtol(value, NULL, 0);
+    OPT2("pic-based-rate-est", "enable-pic-based-rate-est")
+        p->pic_based_rate_est = strtol(value, NULL, 0);
+    OPT2("intra-angle-delta", "enable-intra-angle-delta")
+        p->intra_angle_delta = strtol(value, NULL, 0);
+    OPT2("interintra-comp", "enable-interintra-comp")
+        p->inter_intra_compound = strtol(value, NULL, 0);
+    OPT2("paeth", "enable-paeth")
+        p->enable_paeth = strtol(value, NULL, 0);
+    OPT2("smooth", "enable-smooth")
+        p->enable_smooth = strtol(value, NULL, 0);
+
+    OPT("mrp-level")
+        p->mrp_level = strtol(value, NULL, 0);
+
+    OPT("obmc-level")
+        p->obmc_level = strtol(value, NULL, 0);
+
+    OPT("rdoq-level")
+        p->rdoq_level = strtol(value, NULL, 0);
+
+    OPT("filter-intra-level")
+        p->filter_intra_level = (int8_t)strtoul(value, NULL, 0);
+
+    OPT2("intra-edge-filter", "enable-intra-edge-filter")
+        p->enable_intra_edge_filter = strtol(value, NULL, 0);
+
+    OPT("pred-me")
+        p->pred_me = strtol(value, NULL, 0);
+
+    OPT("bipred-3x3")
+        p->bipred_3x3_inject = strtol(value, NULL, 0);
+
+    OPT("compound")
+        p->compound_level = strtol(value, NULL, 0);
+
+    OPT("use-default-me-hme")
+        p->use_default_me_hme = (EbBool)strtol(value, NULL, 0);
+    OPT("hme")
+        p->enable_hme_flag = (EbBool)strtoul(value, NULL, 0);
+    OPT("hme-l0")
+        p->enable_hme_level0_flag = (EbBool)strtoul(value, NULL, 0);
+    OPT("hme-l1")
+        p->enable_hme_level1_flag = (EbBool)strtoul(value, NULL, 0);
+    OPT("hme-l2")
+        p->enable_hme_level2_flag = (EbBool)strtoul(value, NULL, 0);
+
+    OPT("ext-block")
+        p->ext_block_flag = (EbBool)strtoul(value, NULL, 0);
+
+    OPT("search-w")
+        p->search_area_width = strtoul(value, NULL, 0);
+    OPT("search-h")
+        p->search_area_height = strtoul(value, NULL, 0);
+
+    OPT("scm")
+        p->screen_content_mode = strtol(value, NULL, 0);
+
+    OPT("intrabc-mode")
+        p->intrabc_mode = strtol(value, NULL, 0);
+
+    OPT("hbd-md")
+        p->enable_hbd_mode_decision = (uint8_t)strtoul(value, NULL, 0);
+
+    OPT("palette-level")
+        p->palette_level = (int32_t)strtoul(value, NULL, 0);
+
+    OPT("umv")
+        p->unrestricted_motion_vector = (EbBool)strtol(value, NULL, 0);
+
+    OPT("film-grain")
+        p->film_grain_denoise_strength = strtol(value, NULL, 0);
+
+    OPT("tf-level")
+        p->tf_level = strtol(value, NULL, 0);
+
+    OPT("enable-overlays")
+        p->enable_overlays = (EbBool)strtoul(value, NULL, 0);
+
+    OPT("enable-stat-report")
+        p->stat_report = (uint8_t)strtoul(value, NULL, 0);
+
+    /*
+     * AV1 Specific Options
+     */
+    OPT("color-primaries")
+        p->color_primaries = (uint8_t)strtoul(value, NULL, 0);
+    OPT("transfer-characteristics")
+        p->transfer_characteristics = (uint8_t)strtoul(value, NULL, 0);
+    OPT("matrix-coefficients")
+        p->matrix_coefficients = (uint8_t)strtoul(value, NULL, 0);
+    OPT("color-range")
+        p->color_range = (uint8_t)strtoul(value, NULL, 0);
+    else {
+        b_error = 1;
+        errortype = SVT_PARAM_BAD_NAME;
+    }
+#undef OPT
+#undef OPT2
+
+    av_freep(&name_buf);
+
+    b_error |= value_was_null && !name_was_bool;
+    return b_error ? errortype : 0;
+}
+
 static int config_enc_params(EbSvtAv1EncConfiguration *param,
                              AVCodecContext *avctx)
 {
     SvtContext *svt_enc = avctx->priv_data;
     const AVPixFmtDescriptor *desc;
+    AVDictionaryEntry *en = NULL;
+    int ret;
 
     param->source_width     = avctx->width;
     param->source_height    = avctx->height;
@@ -217,6 +542,16 @@ static int config_enc_params(EbSvtAv1EncConfiguration *param,
 
     param->tile_columns = svt_enc->tile_columns;
     param->tile_rows    = svt_enc->tile_rows;
+
+    while (en = av_dict_get(svt_enc->svt_av1_params, "", en, AV_DICT_IGNORE_SUFFIX)) {
+        if ((ret = svt_param_parse(param, en->key, en->value)) < 0) {
+            av_log(avctx, AV_LOG_WARNING,
+                   "Error parsing option '%s = %s'.\n",
+                   en->key, en->value);
+            if (ret == SVT_PARAM_ALLOC_FAILED)
+                return AVERROR(ENOMEM);
+        }
+    }
 
     return 0;
 }
@@ -532,6 +867,8 @@ static const AVOption options[] = {
 
     { "tile_columns", "Log2 of number of tile columns to use", OFFSET(tile_columns), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 4, VE},
     { "tile_rows", "Log2 of number of tile rows to use", OFFSET(tile_rows), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 6, VE},
+
+     { "svtav1-params",  "Override the SVT-AV1 configuration using a :-separated list of key=value parameters", OFFSET(svt_av1_params), AV_OPT_TYPE_DICT, { 0 }, 0, 0, VE },
 
     {NULL},
 };
