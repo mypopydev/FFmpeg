@@ -1798,6 +1798,10 @@ Set log2 of the number of rows of tiles to use (0-6).
 @item tile_columns
 Set log2 of the number of columns of tiles to use (0-4).
 
+@item svtav1-params
+Set SVT-AV1 options using a list of @var{key}=@var{value} couples separated
+by ":". See @command{SvtAv1EncApp --help} for a list of options.
+
 @end table
 
 @section libkvazaar
