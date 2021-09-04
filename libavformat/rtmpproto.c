@@ -2421,7 +2421,7 @@ static int get_packet(URLContext *s, int for_header)
             if (ret == 0) {
                 return AVERROR(EAGAIN);
             } else {
-                return AVERROR(EIO);
+                return ret == AVERROR_EOF ? AVERROR_EOF : AVERROR(EIO);
             }
         }
 
