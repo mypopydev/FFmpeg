@@ -673,7 +673,7 @@ improves readability.
 Consider adding a regression test for your code.
 
 @item
-If you added YASM code please check that things still work with --disable-yasm.
+If you added NASM/YASM code please check that things still work with --disable-asm.
 
 @item
 Make sure you check the return values of function and return appropriate
