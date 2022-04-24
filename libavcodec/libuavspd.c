@@ -194,7 +194,7 @@ static av_cold int libavspd_init(AVCodecContext *avctx)
     memset(&h->dec_frame, 0, sizeof(xavs_frame_t));
     h->dec_frame.output.format = XAVS_MT_I420;       // default format
 
-    av_log(avctx, AV_LOG_VERBOSE, "decoder created. %p, version %d\n",
+    av_log(avctx, AV_LOG_INFO, "decoder created. %p, version %d\n",
            h->dec_handle, xavs_create.version);
     return 0;
 }
@@ -245,6 +245,10 @@ static int libavspd_decode_frame(AVCodecContext *avctx, AVFrame *frm,
         av_log(avctx, AV_LOG_ERROR, "get null size packet.\n");
     }
 
+    if (buf_size) {
+        av_log(avctx, AV_LOG_INFO, "0x%02x%02x%02x%02x, len %d\n",buf[0],buf[1],buf[2],buf[3], buf_size );
+    }
+
     *got_frame = 0;
     frm->pts = -1;
     frm->pict_type = AV_PICTURE_TYPE_NONE;
@@ -258,8 +262,10 @@ static int libavspd_decode_frame(AVCodecContext *avctx, AVFrame *frm,
             if (avspd_find_seq_start_code(buf_ptr, buf_end - buf_ptr, &left_bytes)) {
                 bs_len = buf_end - buf_ptr - left_bytes;
                 h->found_seqhdr = 1;              // set flag
+                av_log(avctx, AV_LOG_INFO, "get seq header.\n");
                 break;
             }
+            break;
         }
     }
 
