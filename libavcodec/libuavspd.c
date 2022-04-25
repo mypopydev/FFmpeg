@@ -64,6 +64,9 @@ typedef struct avspd_context {
 
     xavs_stats_t    dec_stats;
     xavs_frame_t    dec_frame;
+    headerset_t     seqhdr;
+
+    unsigned char   *out_buf;
 } avspd_context;
 
 /**
@@ -110,8 +113,8 @@ static int avspd_find_next_start_code(const unsigned char *bs_data, int bs_len, 
  */
 static int avspd_find_seq_start_code(const unsigned char *bs_data, int bs_len, int *left)
 {
-    const unsigned char *data_ptr = bs_data + 4;
-    int count = bs_len - 4;
+    const unsigned char *data_ptr = bs_data;
+    int count = bs_len;
 
     while (count >= 4 &&
            AVSPD_CHECK_START_CODE(data_ptr, AVSP_SEQ_START_CODE)) {
@@ -194,6 +197,8 @@ static av_cold int libavspd_init(AVCodecContext *avctx)
     memset(&h->dec_frame, 0, sizeof(xavs_frame_t));
     h->dec_frame.output.format = XAVS_MT_I420;       // default format
 
+    h->out_buf  = NULL;   // pointer to output buffer
+
     av_log(avctx, AV_LOG_INFO, "decoder created. %p, version %d\n",
            h->dec_handle, xavs_create.version);
     return 0;
@@ -233,16 +238,20 @@ static int libavspd_decode_frame(AVCodecContext *avctx, AVFrame *frm,
     int left_bytes;
     int ret, finish = 0;
 
-    xavs_stats_t dec_stats;
-    xavs_frame_t dec_frame;
+    //xavs_stats_t dec_stats;
+    //xavs_frame_t dec_frame;
+
+    int dim_x  = 0;                   // get from parsing the .asm/.avs file
+    int dim_y  = 0;                   // get from parsing the .asm/.avs file
 
     int bs_len;
 
-    //avspd_io_frm_t *frm_dec;
+    unsigned char IMGTYPE[4] = {'I', 'P', 'B', '\x0'};  // character of image type
 
     if (!buf_size) {
         // flush the decoder
         av_log(avctx, AV_LOG_ERROR, "get null size packet.\n");
+        return 0;
     }
 
     if (buf_size) {
@@ -258,79 +267,85 @@ static int libavspd_decode_frame(AVCodecContext *avctx, AVFrame *frm,
 
     if (!h->found_seqhdr) {
         // find the first sequence header
-        for (;;) {
-            if (avspd_find_seq_start_code(buf_ptr, buf_end - buf_ptr, &left_bytes)) {
-                bs_len = buf_end - buf_ptr - left_bytes;
-                h->found_seqhdr = 1;              // set flag
-                av_log(avctx, AV_LOG_INFO, "get seq header.\n");
-                break;
-            }
-            break;
+        if (avspd_find_seq_start_code(buf_ptr, buf_end - buf_ptr, &left_bytes)) {
+            bs_len = buf_end - buf_ptr - left_bytes;
+            h->found_seqhdr = 1;              // set flag
+            av_log(avctx, AV_LOG_INFO, "get seq header.\n");
+        } else {
+            av_log(avctx, AV_LOG_WARNING, "can't find seq header.\n");
+            *got_frame = 0;
+            return 0;
         }
     }
 
-#if 0
-    frm_dec = &h->dec_frame;
-
-    buf_ptr = buf;
-    buf_end = buf + buf_size;
-
-    frm_dec->pkt_pos  = avpkt->pos;
-    frm_dec->pkt_size = avpkt->size;
-
     while (!finish) {
-        int bs_len;
-
-        if (h->got_seqhdr) {
-            if (!frm->data[0] && (ret = ff_get_buffer(avctx, frm, 0)) < 0) {
-                return ret;
-            }
-            h->dec_frame.priv = frm;   // AVFrame
-        }
-
+        // split the buffer with full NALU
         if (avspd_find_next_start_code(buf_ptr, buf_end - buf_ptr, &left_bytes)) {
             bs_len = buf_end - buf_ptr - left_bytes;
         } else {
             bs_len = buf_end - buf_ptr;
             finish = 1;
         }
-        frm_dec->bs = (unsigned char *)buf_ptr;
-        frm_dec->bs_len = bs_len;
-        frm_dec->pts = avpkt->pts;
-        frm_dec->dts = avpkt->dts;
-        avspd_decode(h->dec_handle, frm_dec);
+
+        h->dec_frame.bs_buf = (unsigned char *)buf_ptr;
+        h->dec_frame.bs_len = bs_len;
+        av_log(avctx, AV_LOG_INFO, "Decoder 0x%02x%02x%02x%02x, len %d, ret %d\n",buf_ptr[0],buf_ptr[1],buf_ptr[2],buf_ptr[3], bs_len, ret);
+        ret = libuavspd_decode(h->dec_handle, XAVS_DECODE, &h->dec_frame, &h->dec_stats);
         buf_ptr += bs_len;
 
-        if (frm_dec->nal_type == NAL_SEQ_HEADER) {
-            struct avspd_com_seqh_t *seqh = frm_dec->seqhdr;
-            if (AVSPD_CHECK_INVALID_RANGE(seqh->frame_rate_code, 0, 15)) {
-                av_log(avctx, AV_LOG_ERROR, "Invalid frame rate code: %d.\n", seqh->frame_rate_code);
-                seqh->frame_rate_code = 3; // default 25 fps
-            } else {
-                avctx->framerate.num = ff_avs3_frame_rate_tab[seqh->frame_rate_code].num;
-                avctx->framerate.den = ff_avs3_frame_rate_tab[seqh->frame_rate_code].den;
-            }
-            avctx->has_b_frames  = !seqh->low_delay;
-            avctx->pix_fmt = seqh->bit_depth_internal == 8 ? AV_PIX_FMT_YUV420P : AV_PIX_FMT_YUV420P10LE;
-            ret = ff_set_dimensions(avctx, seqh->horizontal_size, seqh->vertical_size);
-            if (ret < 0)
-                return ret;
-            h->got_seqhdr = 1;
-        }
+        printf("type: %d\n", h->dec_stats.type);
+        switch (h->dec_stats.type) {
+        case XAVS_TYPE_DECODED:   // decode one frame
+            printf(" (%c) ", IMGTYPE[h->dec_frame.output.type]);       // image type
+            printf("%I64u, ", h->dec_frame.output.pts);               // test for pts, output
+            break;
 
-        if (frm_dec->got_pic) {
+        case XAVS_TYPE_ERROR:     // error, current or next frame was not decoded
+            printf("%8I64u, ", h->dec_frame.output.pts);               // test for pts, output
+            printf("!!!ERROR!!!\n");
+            break;
+
+        case XAVS_TYPE_NOTHING:   // nothing was decoded
+            break;
+
+        case XAVS_TYPE_SEQ:       // sequence header was decoded
+            if (memcmp(&h->seqhdr, &h->dec_stats.seq_set, sizeof(h->seqhdr))) {
+                memcpy(&h->seqhdr, &h->dec_stats.seq_set, sizeof(h->seqhdr));
+
+                // resize image buffer
+                int frm_w;
+                int frm_h;
+                dim_x = h->dec_stats.seq_set.horizontal_size;
+                dim_y = h->dec_stats.seq_set.vertical_size;
+                frm_w = ((dim_x + 15) >> 4) << 4;   // frame width
+                frm_h = (h->dec_stats.seq_set.progressive == 0) ?
+                        (((dim_y / 2 + 15) >> 4) << 5) : (((dim_y + 15) >> 4) << 4);
+
+                printf("Resized frame buffer to %dx%d frame rate %f\n", dim_x, dim_y, h->dec_stats.seq_set.frame_rate);
+                printf(" index  type  qp   psnr(Y)   psnr(U)   psnr(V)\n");
+                printf("--------------------------------------------------\n");
+
+                // free old output buffer and allocate the new buffer
+                if (h->out_buf) {
+                    free(h->out_buf);
+                }
+                h->out_buf = (unsigned char *)malloc(dim_x * dim_y * 4);
+                if (h->out_buf == NULL) {
+                    printf("Allocing memory error.\n");
+                    exit(-1);
+                } else {
+                    h->dec_frame.output.raw_data   = h->out_buf;
+                    h->dec_frame.output.raw_stride = dim_x;
+                }
+            }
+            break;
+
+        case XAVS_TYPE_EOS:       // end of sequence, decoding work finished
+            // runing = 0;        // set flag to terminate
             break;
         }
     }
 
-    *got_frame = h->dec_frame.got_pic;
-
-    if (!(*got_frame)) {
-        av_frame_unref(frm);
-    }
-
-    return buf_ptr - buf;
-#endif
     return 0;
 }
 
