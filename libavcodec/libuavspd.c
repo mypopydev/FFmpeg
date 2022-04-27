@@ -67,6 +67,8 @@ typedef struct avspd_context {
     headerset_t     seqhdr;
 
     unsigned char   *out_buf;
+
+    int             index;
 } avspd_context;
 
 /**
@@ -130,53 +132,17 @@ static int avspd_find_seq_start_code(const unsigned char *bs_data, int bs_len, i
     return 0;
 }
 
-#if 0
-static void avspd_output_callback(avspd_io_frm_t *dec_frame) {
-    avspd_io_frm_t frm_out;
-    AVFrame *frm = (AVFrame *)dec_frame->priv;
-    int i;
-
-    if (!frm || !frm->data[0]) {
-        dec_frame->got_pic = 0;
-        av_log(NULL, AV_LOG_ERROR, "Invalid AVFrame in avspd output.\n");
-        return;
-    }
-
-    frm->pts       = dec_frame->pts;
-    frm->pkt_dts   = dec_frame->dts;
-    frm->pkt_pos   = dec_frame->pkt_pos;
-    frm->pkt_size  = dec_frame->pkt_size;
-    frm->coded_picture_number   = dec_frame->dtr;
-    frm->display_picture_number = dec_frame->ptr;
-
-    if (dec_frame->type < 0 || dec_frame->type >= 4) {
-        av_log(NULL, AV_LOG_WARNING, "Error frame type in avspd: %d.\n", dec_frame->type);
-    }
-
-    frm->pict_type = ff_avs3_image_type[dec_frame->type];
-    frm->key_frame = (frm->pict_type == AV_PICTURE_TYPE_I);
-
-    for (i = 0; i < 3; i++) {
-        frm_out.width [i] = dec_frame->width[i];
-        frm_out.height[i] = dec_frame->height[i];
-        frm_out.stride[i] = frm->linesize[i];
-        frm_out.buffer[i] = frm->data[i];
-    }
-
-    avspd_img_cpy_cvt(&frm_out, dec_frame, dec_frame->bit_depth);
-}
-#endif
-
 static av_cold int libavspd_init(AVCodecContext *avctx)
 {
+    av_log(avctx, AV_LOG_WARNING, "%s\n", __FUNCTION__);
     avspd_context *h = avctx->priv_data;
     int ret;
 
     xavs_create_t xavs_create;
 
     memset(&xavs_create, 0, sizeof(xavs_create_t));
-    xavs_create.threads_parse =
-        avctx->thread_count > 0 ? avctx->thread_count : av_cpu_count();
+    xavs_create.threads_parse = 1;
+    // avctx->thread_count > 0 ? avctx->thread_count : av_cpu_count();
 
     // create the AVSP decoder
     ret = libuavspd_decode(NULL, XAVS_CREATE, &xavs_create, NULL);
@@ -188,16 +154,15 @@ static av_cold int libavspd_init(AVCodecContext *avctx)
     h->got_seqhdr = 0;
     h->found_seqhdr = 0;
     h->dec_handle = xavs_create.handle;
-    if (!h->dec_handle) {
-        av_log(avctx, AV_LOG_ERROR, "decoder created get null handle.");
-        return AVERROR_EXTERNAL;
-    }
 
     memset(&h->dec_stats, 0, sizeof(xavs_stats_t));
+    memset(&h->dec_stats.seq_set, 0, sizeof(headerset_t));
     memset(&h->dec_frame, 0, sizeof(xavs_frame_t));
     h->dec_frame.output.format = XAVS_MT_I420;       // default format
 
     h->out_buf  = NULL;   // pointer to output buffer
+
+    h->index = 0;
 
     av_log(avctx, AV_LOG_INFO, "decoder created. %p, version %d\n",
            h->dec_handle, xavs_create.version);
@@ -206,9 +171,11 @@ static av_cold int libavspd_init(AVCodecContext *avctx)
 
 static av_cold int libavspd_end(AVCodecContext *avctx)
 {
+    av_log(avctx, AV_LOG_WARNING, "%s\n", __FUNCTION__);
     avspd_context *h = avctx->priv_data;
 
     if (h->dec_handle) {
+        libuavspd_decode(h->dec_handle, XAVS_RESET, NULL, NULL);
         libuavspd_decode(h->dec_handle, XAVS_DESTROY, NULL, NULL);
         h->dec_handle = NULL;
     }
@@ -219,6 +186,7 @@ static av_cold int libavspd_end(AVCodecContext *avctx)
 
 static void libavspd_flush(AVCodecContext * avctx)
 {
+    av_log(avctx, AV_LOG_WARNING, "%s\n", __FUNCTION__);
     avspd_context *h = avctx->priv_data;
 
     if (h->dec_handle) {
@@ -236,7 +204,7 @@ static int libavspd_decode_frame(AVCodecContext *avctx, AVFrame *frm,
     const uint8_t *buf_end;
     const uint8_t *buf_ptr;
     int left_bytes;
-    int ret, finish = 0;
+    int ret = 0, finish = 0;
 
     //xavs_stats_t dec_stats;
     //xavs_frame_t dec_frame;
@@ -247,6 +215,7 @@ static int libavspd_decode_frame(AVCodecContext *avctx, AVFrame *frm,
     int bs_len;
 
     unsigned char IMGTYPE[4] = {'I', 'P', 'B', '\x0'};  // character of image type
+    av_log(avctx, AV_LOG_WARNING, "%s\n", __FUNCTION__);
 
     if (!buf_size) {
         // flush the decoder
@@ -261,6 +230,10 @@ static int libavspd_decode_frame(AVCodecContext *avctx, AVFrame *frm,
     *got_frame = 0;
     frm->pts = -1;
     frm->pict_type = AV_PICTURE_TYPE_NONE;
+
+    h->dec_frame.output.format = XAVS_MT_I420;       // default format
+    h->dec_frame.output.pts = avpkt->pts;       // pts
+    //h->dec_frame.output.pts = 100;       // default format
 
     buf_ptr = buf;
     buf_end = buf + buf_size;
@@ -279,6 +252,14 @@ static int libavspd_decode_frame(AVCodecContext *avctx, AVFrame *frm,
     }
 
     while (!finish) {
+#if 0
+        if (h->got_seqhdr) {
+            if (!frm->data[0] && (ret = ff_get_buffer(avctx, frm, 0)) < 0) {
+                return ret;
+            }
+        }
+#endif
+
         // split the buffer with full NALU
         if (avspd_find_next_start_code(buf_ptr, buf_end - buf_ptr, &left_bytes)) {
             bs_len = buf_end - buf_ptr - left_bytes;
@@ -289,15 +270,60 @@ static int libavspd_decode_frame(AVCodecContext *avctx, AVFrame *frm,
 
         h->dec_frame.bs_buf = (unsigned char *)buf_ptr;
         h->dec_frame.bs_len = bs_len;
-        av_log(avctx, AV_LOG_INFO, "Decoder 0x%02x%02x%02x%02x, len %d, ret %d\n",buf_ptr[0],buf_ptr[1],buf_ptr[2],buf_ptr[3], bs_len, ret);
         ret = libuavspd_decode(h->dec_handle, XAVS_DECODE, &h->dec_frame, &h->dec_stats);
+        av_log(avctx, AV_LOG_INFO, "Decoder 0x%02x%02x%02x%02x, len %d, ret %d, type %d, frame %c\n",buf_ptr[0],buf_ptr[1],buf_ptr[2],buf_ptr[3], bs_len, ret, h->dec_stats.type, IMGTYPE[h->dec_frame.output.type]);
         buf_ptr += bs_len;
 
-        printf("type: %d\n", h->dec_stats.type);
+        printf("type: %d  xxx\n", h->dec_stats.type);
         switch (h->dec_stats.type) {
         case XAVS_TYPE_DECODED:   // decode one frame
-            printf(" (%c) ", IMGTYPE[h->dec_frame.output.type]);       // image type
-            printf("%I64u, ", h->dec_frame.output.pts);               // test for pts, output
+        {
+            printf(" (%c) \n", IMGTYPE[h->dec_frame.output.type]);       // image type
+            //printf("%I64u, ", h->dec_frame.output.pts);               // test for pts, output
+
+            if (h->got_seqhdr) {
+                if (!frm->data[0] && (ret = ff_get_buffer(avctx, frm, 0)) < 0) {
+                    av_log(avctx, AV_LOG_ERROR, "Decoder error: unknown frame type\n");
+                    return ret;
+                }
+            }
+
+            if (h->dec_frame.output.type == FRM_I) {
+                frm->pict_type = AV_PICTURE_TYPE_I;
+                frm->key_frame = 1;
+            } else if (h->dec_frame.output.type == FRM_P) {
+                frm->pict_type = AV_PICTURE_TYPE_P;
+                frm->key_frame = 0;
+            } else if  (h->dec_frame.output.type == FRM_B) {
+                frm->pict_type = AV_PICTURE_TYPE_B;
+                frm->key_frame = 0;
+            } else {
+                av_log(avctx, AV_LOG_ERROR, "Decoder error: unknown frame type\n");
+                return AVERROR_EXTERNAL;
+            }
+
+            frm->interlaced_frame = h->dec_stats.seq_set.progressive;
+            frm->format           = AV_PIX_FMT_YUV420P;
+            frm->width            = avctx->width;
+            frm->height           = avctx->height;
+            frm->pts              = h->dec_frame.output.pts;
+
+            const uint8_t *y_plane = h->dec_frame.output.raw_data;
+            const uint8_t *u_plane = h->dec_frame.output.raw_data + (avctx->width * avctx->height);
+            const uint8_t *v_plane = h->dec_frame.output.raw_data + 5*(avctx->width * avctx->height)/4;
+
+            int y_stride  = h->dec_frame.output.raw_stride;
+            int uv_stride = h->dec_frame.output.raw_stride/2;
+
+            const uint8_t *planes[4] = { y_plane,  u_plane,   v_plane   };
+            const int      stride[4] = { y_stride, uv_stride, uv_stride };
+
+            av_image_copy(frm->data, frm->linesize, planes,
+                          stride, avctx->pix_fmt, avctx->width, avctx->height);
+            printf("%d  (%c) ddddd\n", h->index++, IMGTYPE[h->dec_frame.output.type]);
+
+            *got_frame = 1;
+        }
             break;
 
         case XAVS_TYPE_ERROR:     // error, current or next frame was not decoded
@@ -310,16 +336,24 @@ static int libavspd_decode_frame(AVCodecContext *avctx, AVFrame *frm,
 
         case XAVS_TYPE_SEQ:       // sequence header was decoded
             if (memcmp(&h->seqhdr, &h->dec_stats.seq_set, sizeof(h->seqhdr))) {
+
                 memcpy(&h->seqhdr, &h->dec_stats.seq_set, sizeof(h->seqhdr));
 
+                avctx->has_b_frames  = !h->seqhdr.low_delay;
+                avctx->pix_fmt = AV_PIX_FMT_YUV420P;
+                avctx->profile = h->dec_stats.seq_set.profile_id;
+                avctx->level  =  h->dec_stats.seq_set.level_id;
+                ret = ff_set_dimensions(avctx, h->seqhdr.horizontal_size, h->seqhdr.vertical_size);
+                if (ret < 0)
+                    return ret;
+                h->got_seqhdr = 1;
+                avctx->framerate = av_d2q(h->seqhdr.frame_rate, 4096);
+                //*got_frame = 0;
+                //return 0;
+
                 // resize image buffer
-                int frm_w;
-                int frm_h;
                 dim_x = h->dec_stats.seq_set.horizontal_size;
                 dim_y = h->dec_stats.seq_set.vertical_size;
-                frm_w = ((dim_x + 15) >> 4) << 4;   // frame width
-                frm_h = (h->dec_stats.seq_set.progressive == 0) ?
-                        (((dim_y / 2 + 15) >> 4) << 5) : (((dim_y + 15) >> 4) << 4);
 
                 printf("Resized frame buffer to %dx%d frame rate %f\n", dim_x, dim_y, h->dec_stats.seq_set.frame_rate);
                 printf(" index  type  qp   psnr(Y)   psnr(U)   psnr(V)\n");
@@ -337,6 +371,9 @@ static int libavspd_decode_frame(AVCodecContext *avctx, AVFrame *frm,
                     h->dec_frame.output.raw_data   = h->out_buf;
                     h->dec_frame.output.raw_stride = dim_x;
                 }
+
+                //*got_frame = 0;
+                //return 0;
             }
             break;
 
@@ -346,7 +383,13 @@ static int libavspd_decode_frame(AVCodecContext *avctx, AVFrame *frm,
         }
     }
 
-    return 0;
+#if 1
+    if (!(*got_frame)) {
+        av_frame_unref(frm);
+    }
+#endif
+
+    return buf_ptr - buf;
 }
 
 const FFCodec ff_libuavspd_decoder = {
