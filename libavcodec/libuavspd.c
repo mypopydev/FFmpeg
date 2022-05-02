@@ -1,8 +1,5 @@
 /*
- * RAW AVS3-P2/IEEE1857.10 video demuxer
- * Copyright (c) 2020 Zhenyu Wang <wangzhenyu@pkusz.edu.cn>
- *                    Bingjie Han <hanbj@pkusz.edu.cn>
- *                    Huiwen Ren  <hwrenx@gmail.com>
+ * AVS+ video decoder
  *
  * This file is part of FFmpeg.
  *
@@ -175,6 +172,9 @@ static av_cold int libavspd_end(AVCodecContext *avctx)
     avspd_context *h = avctx->priv_data;
 
     if (h->dec_handle) {
+        if (h->out_buf) {
+            free(h->out_buf);
+        }
         libuavspd_decode(h->dec_handle, XAVS_RESET, NULL, NULL);
         libuavspd_decode(h->dec_handle, XAVS_DESTROY, NULL, NULL);
         h->dec_handle = NULL;
@@ -271,7 +271,9 @@ static int libavspd_decode_frame(AVCodecContext *avctx, AVFrame *frm,
         h->dec_frame.bs_buf = (unsigned char *)buf_ptr;
         h->dec_frame.bs_len = bs_len;
         ret = libuavspd_decode(h->dec_handle, XAVS_DECODE, &h->dec_frame, &h->dec_stats);
-        av_log(avctx, AV_LOG_INFO, "Decoder 0x%02x%02x%02x%02x, len %d, ret %d, type %d, frame %c\n",buf_ptr[0],buf_ptr[1],buf_ptr[2],buf_ptr[3], bs_len, ret, h->dec_stats.type, IMGTYPE[h->dec_frame.output.type]);
+        av_log(avctx, AV_LOG_INFO, "Decoder 0x%02x%02x%02x%02x, len %d, ret %d, type %d, frame %c\n",
+               buf_ptr[0],buf_ptr[1],buf_ptr[2],buf_ptr[3], bs_len, ret,
+               h->dec_stats.type, IMGTYPE[h->dec_frame.output.type]);
         buf_ptr += bs_len;
 
         printf("type: %d  xxx\n", h->dec_stats.type);
