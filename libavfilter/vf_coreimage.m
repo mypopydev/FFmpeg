@@ -22,7 +22,8 @@
  * @file
  * Video processing based on Apple's CoreImage API
  */
-
+#define GL_SILENCE_DEPRECATION
+#define CI_SILENCE_GL_DEPRECATION
 #import <CoreImage/CoreImage.h>
 #import <AppKit/AppKit.h>
 
