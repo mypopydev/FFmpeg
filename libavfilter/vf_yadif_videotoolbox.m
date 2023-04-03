@@ -208,6 +208,7 @@ static av_cold int do_init(AVFilterContext *ctx) API_AVAILABLE(macos(10.11), ios
     YADIFVTContext *s = ctx->priv;
     NSError *err = nil;
     CVReturn ret;
+    dispatch_data_t libData;
 
     s->mtlDevice = MTLCreateSystemDefaultDevice();
     if (!s->mtlDevice) {
@@ -217,7 +218,7 @@ static av_cold int do_init(AVFilterContext *ctx) API_AVAILABLE(macos(10.11), ios
 
     av_log(ctx, AV_LOG_INFO, "Using Metal device: %s\n", s->mtlDevice.name.UTF8String);
 
-    dispatch_data_t libData = dispatch_data_create(
+    libData = dispatch_data_create(
         ff_vf_yadif_videotoolbox_metallib_data,
         ff_vf_yadif_videotoolbox_metallib_len,
         nil,
