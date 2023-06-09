@@ -383,6 +383,9 @@ static int get_dvb_stream_type(AVFormatContext *s, AVStream *st)
     case AV_CODEC_ID_VC1:
         stream_type = STREAM_TYPE_VIDEO_VC1;
         break;
+    case AV_CODEC_ID_AV1:
+        stream_type = STREAM_TYPE_PRIVATE_DATA;
+        break;
     case AV_CODEC_ID_MP2:
     case AV_CODEC_ID_MP3:
         if (   st->codecpar->sample_rate > 0
@@ -802,6 +805,11 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
             } else if (stream_type == STREAM_TYPE_VIDEO_CAVS || stream_type == STREAM_TYPE_VIDEO_AVS2 ||
                        stream_type == STREAM_TYPE_VIDEO_AVS3) {
                 put_registration_descriptor(&q, MKTAG('A', 'V', 'S', 'V'));
+            } else if (stream_type == STREAM_TYPE_PRIVATE_DATA && codec_id == AV_CODEC_ID_AV1) {
+                put_registration_descriptor(&q, MKTAG('A', 'V', '0', '1')); // AV1 registration_descriptor
+
+                // AV1 video descriptor
+                
             }
             break;
         case AVMEDIA_TYPE_DATA:
@@ -1464,6 +1472,9 @@ static int get_pes_stream_id(AVFormatContext *s, AVStream *st, int stream_id, in
             stream_id == STREAM_ID_PRIVATE_STREAM_1) /* asynchronous KLV */
             *async = 1;
         return stream_id != -1 ? stream_id : STREAM_ID_METADATA_STREAM;
+    } else if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO &&
+               st->codecpar->codec_id == AV_CODEC_ID_AV1) {
+        return STREAM_ID_PRIVATE_STREAM_1;
     } else {
         return STREAM_ID_PRIVATE_STREAM_1;
     }

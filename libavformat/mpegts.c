@@ -871,6 +871,7 @@ static const StreamType REGD_types[] = {
     { MKTAG('I', 'D', '3', ' '), AVMEDIA_TYPE_DATA,  AV_CODEC_ID_TIMED_ID3 },
     { MKTAG('V', 'C', '-', '1'), AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_VC1   },
     { MKTAG('O', 'p', 'u', 's'), AVMEDIA_TYPE_AUDIO, AV_CODEC_ID_OPUS  },
+    { MKTAG('A', 'V', '0', '1'), AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_AV1   },
     { 0 },
 };
 
@@ -2237,6 +2238,27 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
                    dovi->bl_present_flag,
                    dependency_pid,
                    dovi->dv_bl_signal_compatibility_id);
+        }
+        break;
+    case 0x80: /* AV1 video descriptor */
+        if (stream_type == STREAM_TYPE_PRIVATE_DATA) {
+            FFStream *sti = ffstream(st);
+
+            if (desc_len < 4) // 4 bytes
+                return AVERROR_INVALIDDATA;
+
+            if (st->codecpar->codec_id == AV_CODEC_ID_AV1) {
+                if (!st->codecpar->extradata) {
+                    st->codecpar->extradata = av_mallocz(desc_len + AV_INPUT_BUFFER_PADDING_SIZE);
+                    if (!st->codecpar->extradata)
+                        return AVERROR(ENOMEM);
+                    st->codecpar->extradata_size = desc_len;
+                    memcpy(st->codecpar->extradata, *pp, st->codecpar->extradata_size);
+
+                    sti->need_parsing = AVSTREAM_PARSE_FULL;
+                    sti->need_context_update = 1;
+                }
+            }
         }
         break;
     default:
