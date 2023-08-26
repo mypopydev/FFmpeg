@@ -840,6 +840,7 @@ static const StreamType HDMV_types[] = {
 
 /* SCTE types */
 static const StreamType SCTE_types[] = {
+    { 0x82, AVMEDIA_TYPE_SUBTITLE,  AV_CODEC_ID_SCTE_27},
     { 0x86, AVMEDIA_TYPE_DATA,  AV_CODEC_ID_SCTE_35    },
     { 0 },
 };
@@ -1791,6 +1792,44 @@ static void scte_data_cb(MpegTSFilter *filter, const uint8_t *section,
 
 }
 
+static void scte27_cb(MpegTSFilter *filter, const uint8_t *section,
+                    int section_len)
+{
+    MpegTSContext *ts = filter->u.section_filter.opaque;
+    MpegTSSectionFilter *tssf = &filter->u.section_filter;
+    struct Program old_program;
+    SectionHeader h1, *h = &h1;
+    PESContext *pes;
+    AVStream *st;
+    const uint8_t *p, *p_end, *desc_list_end;
+    int program_info_length, pcr_pid, pid, stream_type;
+    int desc_list_len;
+    uint32_t prog_reg_desc = 0; /* registration descriptor */
+    int stream_identifier = -1;
+    struct Program *prg;
+
+    int mp4_descr_count = 0;
+    Mp4Descr mp4_descr[MAX_MP4_DESCR_COUNT] = { { 0 } };
+    int i;
+    av_log(ts->stream, AV_LOG_INFO, "SCTE 27 subtitle: len %i\n", section_len);
+    hex_dump_debug(ts->stream, section, section_len);
+
+    p_end = section + section_len - 4;
+    p = section;
+    if (parse_section_header(h, &p, p_end) < 0)
+        return;
+    if (h->tid != 0xC6)
+        return;
+    if (!h->current_next)
+        return;
+    if (skip_identical(h, tssf))
+        return;
+
+    av_log(ts->stream, AV_LOG_INFO, "sid=0x%x sec_num=%d/%d version=%d tid=%02x\n",
+            h->id, h->sec_num, h->last_sec_num, h->version, h->tid);
+}
+
+
 static const uint8_t opus_coupled_stream_cnt[9] = {
     1, 0, 1, 1, 2, 2, 2, 3, 3
 };
@@ -2309,7 +2348,7 @@ static int parse_stream_identifier_desc(const uint8_t *p, const uint8_t *p_end)
 
 static int is_pes_stream(int stream_type, uint32_t prog_reg_desc)
 {
-    return !(stream_type == 0x13 ||
+    return !(stream_type == 0x13 || stream_type == 0x82 ||
              (stream_type == 0x86 && prog_reg_desc == AV_RL32("CUEI")) );
 }
 
@@ -2479,10 +2518,14 @@ static void pmt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
                 if (!st)
                     goto out;
                 st->id = pid;
-                st->codecpar->codec_type = AVMEDIA_TYPE_DATA;
                 if (stream_type == 0x86 && prog_reg_desc == AV_RL32("CUEI")) {
+                    st->codecpar->codec_type = AVMEDIA_TYPE_DATA;
                     mpegts_find_stream_type(st, stream_type, SCTE_types);
                     mpegts_open_section_filter(ts, pid, scte_data_cb, ts, 1);
+                } else if (stream_type == 0x82) {
+                    st->codecpar->codec_type = AVMEDIA_TYPE_SUBTITLE;
+                    mpegts_find_stream_type(st, stream_type, SCTE_types);
+                    mpegts_open_section_filter(ts, pid, scte27_cb, ts, 1);
                 }
             }
         }
