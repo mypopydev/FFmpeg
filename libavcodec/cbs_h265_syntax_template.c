@@ -717,6 +717,16 @@ static int FUNC(sps_range_extension)(CodedBitstreamContext *ctx, RWContext *rw,
     return 0;
 }
 
+static int FUNC(sps_multilayer_extension)(CodedBitstreamContext *ctx, RWContext *rw,
+                                          H265RawSPS *current)
+{
+    int err;
+
+    flag(inter_view_mv_vert_constraint_flag);
+
+    return 0;
+}
+
 static int FUNC(sps_scc_extension)(CodedBitstreamContext *ctx, RWContext *rw,
                                    H265RawSPS *current)
 {
@@ -952,7 +962,7 @@ static int FUNC(sps)(CodedBitstreamContext *ctx, RWContext *rw,
     if (current->sps_range_extension_flag)
         CHECK(FUNC(sps_range_extension)(ctx, rw, current));
     if (current->sps_multilayer_extension_flag)
-        return AVERROR_PATCHWELCOME;
+        CHECK(FUNC(sps_multilayer_extension)(ctx, rw, current));
     if (current->sps_3d_extension_flag)
         return AVERROR_PATCHWELCOME;
     if (current->sps_scc_extension_flag)
