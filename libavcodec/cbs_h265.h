@@ -330,6 +330,9 @@ typedef struct H265RawSPS {
     uint8_t persistent_rice_adaptation_enabled_flag;
     uint8_t cabac_bypass_alignment_enabled_flag;
 
+    // Multilayer extension.
+    uint8_t inter_view_mv_vert_constraint_flag;
+
     // Screen content coding extension.
     uint8_t sps_curr_pic_ref_enabled_flag;
     uint8_t palette_mode_enabled_flag;
