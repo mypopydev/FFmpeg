@@ -1003,6 +1003,52 @@ static int FUNC(pps_range_extension)(CodedBitstreamContext *ctx, RWContext *rw,
     return 0;
 }
 
+static int FUNC(pps_multilayer_extension)(CodedBitstreamContext *ctx, RWContext *rw,
+                                          H265RawPPS *current)
+{
+    int err, i, index;
+
+    flag(poc_reset_info_present_flag);
+    flag(pps_infer_scaling_list_flag);
+    if (current->pps_infer_scaling_list_flag)
+        ub(6, pps_scaling_list_ref_layer_id);
+    ue(num_ref_loc_offsets, 0, HEVC_MAX_LAYERS);
+
+    for (i=0; i<current->num_ref_loc_offsets; i++) {
+        ub(6, ref_loc_offset_layer_id[i]);
+        index = current->ref_loc_offset_layer_id[i];
+
+        flag(scaled_ref_layer_offset_present_flag[i]);
+        if (current->scaled_ref_layer_offset_present_flag[i]) {
+            se(scaled_ref_layer_left_offset[index],    -16383, +16384);
+            se(scaled_ref_layer_top_offset[index],     -16383, +16384);
+            se(scaled_ref_layer_right_offset[index],   -16383, +16384);
+            se(scaled_ref_layer_bottom_offset[index],  -16383, +16384);
+        }
+
+        flag(ref_region_offset_present_flag[i]);
+        if (current->ref_region_offset_present_flag[i]) {
+            se(ref_region_left_offset[index],    -16383, +16384);
+            se(ref_region_top_offset[index],     -16383, +16384);
+            se(ref_region_right_offset[index],   -16383, +16384);
+            se(ref_region_bottom_offset[index],  -16383, +16384);
+        }
+
+        flag(resample_phase_set_present_flag[i]);
+        if (current->resample_phase_set_present_flag[i]) {
+            ue(phase_hor_luma[index],           0, 31);
+            ue(phase_ver_luma[index],           0, 31);
+            ue(phase_hor_chroma_plus8[index],   0, 63);
+            ue(phase_ver_chroma_plus8[index],   0, 63);
+        }
+    }
+
+    flag(colour_mapping_enabled_flag);
+    if (current->colour_mapping_enabled_flag)
+        return AVERROR_PATCHWELCOME;
+    return 0;
+}
+
 static int FUNC(pps_scc_extension)(CodedBitstreamContext *ctx, RWContext *rw,
                                    H265RawPPS *current)
 {
@@ -1153,7 +1199,7 @@ static int FUNC(pps)(CodedBitstreamContext *ctx, RWContext *rw,
     if (current->pps_range_extension_flag)
         CHECK(FUNC(pps_range_extension)(ctx, rw, current));
     if (current->pps_multilayer_extension_flag)
-        return AVERROR_PATCHWELCOME;
+        CHECK(FUNC(pps_multilayer_extension)(ctx, rw, current));
     if (current->pps_3d_extension_flag)
         return AVERROR_PATCHWELCOME;
     if (current->pps_scc_extension_flag)

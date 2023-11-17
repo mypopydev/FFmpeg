@@ -421,6 +421,34 @@ typedef struct H265RawPPS {
     uint8_t log2_sao_offset_scale_luma;
     uint8_t log2_sao_offset_scale_chroma;
 
+    // Multilayer extension
+    uint8_t poc_reset_info_present_flag;
+    uint8_t pps_infer_scaling_list_flag;
+    uint8_t pps_scaling_list_ref_layer_id;
+    uint8_t num_ref_loc_offsets;
+    uint8_t ref_loc_offset_layer_id[HEVC_MAX_LAYERS];
+
+    uint8_t scaled_ref_layer_offset_present_flag[HEVC_MAX_LAYERS];
+    int16_t scaled_ref_layer_left_offset[HEVC_MAX_LAYERS];
+    int16_t scaled_ref_layer_top_offset[HEVC_MAX_LAYERS];
+    int16_t scaled_ref_layer_right_offset[HEVC_MAX_LAYERS];
+    int16_t scaled_ref_layer_bottom_offset[HEVC_MAX_LAYERS];
+
+    uint8_t ref_region_offset_present_flag[HEVC_MAX_LAYERS];
+    int16_t ref_region_left_offset[HEVC_MAX_LAYERS];
+    int16_t ref_region_top_offset[HEVC_MAX_LAYERS];
+    int16_t ref_region_right_offset[HEVC_MAX_LAYERS];
+    int16_t ref_region_bottom_offset[HEVC_MAX_LAYERS];
+
+    uint8_t resample_phase_set_present_flag[HEVC_MAX_LAYERS];
+    uint8_t phase_hor_luma[HEVC_MAX_LAYERS];
+    uint8_t phase_ver_luma[HEVC_MAX_LAYERS];
+    uint8_t phase_hor_chroma_plus8[HEVC_MAX_LAYERS];
+    uint8_t phase_ver_chroma_plus8[HEVC_MAX_LAYERS];
+
+    uint8_t colour_mapping_enabled_flag;
+    // TODO: colour_mapping_table
+
     // Screen content coding extension.
     uint8_t pps_curr_pic_ref_enabled_flag;
     uint8_t residual_adaptive_colour_transform_enabled_flag;
