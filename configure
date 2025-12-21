@@ -5570,10 +5570,33 @@ elif enabled arm; then
     esac
 
     case "$subarch" in
-        armv5t*)    enable fast_clz                ;;
-        armv[6-8]*)
+        armv5t*)
+            enable fast_clz
+            # ARMv5TE doesn't support ARMv6+ features
+            disable armv6 armv6t2 neon vfp vfpv3
+            ;;
+        armv6)
             enable fast_clz
             disabled fast_unaligned || enable fast_unaligned
+            # Plain ARMv6 doesn't support ARMv6T2 or NEON
+            disable armv6t2 neon vfpv3
+            ;;
+        armv6j|armv6k|armv6z|armv6zk)
+            enable fast_clz
+            disabled fast_unaligned || enable fast_unaligned
+            # These ARMv6 variants don't support ARMv6T2 or NEON
+            disable armv6t2 neon vfpv3
+            ;;
+        armv6t2*)
+            enable fast_clz
+            disabled fast_unaligned || enable fast_unaligned
+            # ARMv6T2 doesn't support NEON
+            disable neon vfpv3
+            ;;
+        armv[7-8]*)
+            enable fast_clz
+            disabled fast_unaligned || enable fast_unaligned
+            # ARMv7/ARMv8 features are checked later via compiler tests
             ;;
     esac
 
