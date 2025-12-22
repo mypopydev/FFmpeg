@@ -807,6 +807,8 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
                 put_registration_descriptor(&q, MKTAG('V', 'C', '-', '1'));
             } else if (stream_type == STREAM_TYPE_VIDEO_HEVC && s->strict_std_compliance <= FF_COMPLIANCE_NORMAL) {
                 put_registration_descriptor(&q, MKTAG('H', 'E', 'V', 'C'));
+            } else if (stream_type == STREAM_TYPE_VIDEO_VVC && s->strict_std_compliance <= FF_COMPLIANCE_NORMAL) {
+                put_registration_descriptor(&q, MKTAG('V', 'V', 'C', ' '));
             } else if (stream_type == STREAM_TYPE_VIDEO_CAVS || stream_type == STREAM_TYPE_VIDEO_AVS2 ||
                        stream_type == STREAM_TYPE_VIDEO_AVS3) {
                 put_registration_descriptor(&q, MKTAG('A', 'V', 'S', 'V'));
