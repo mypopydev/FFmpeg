@@ -2401,8 +2401,11 @@ static int mpegts_check_bitstream(AVFormatContext *s, AVStream *st,
     if (st->codecpar->codec_id == AV_CODEC_ID_AV1 && pkt->size >= 4) {
         /* Check if data starts with start code 0x000001 */
         if (AV_RB24(pkt->data) != 0x000001) {
+            av_log(s, AV_LOG_INFO, "Auto-inserting av1_ts BSF for stream %d (no start code found)\n", st->index);
             /* No start code found, need to convert from Low Overhead to Start Code format */
             return ff_stream_add_bitstream_filter(st, "av1_ts", "mode=to_ts");
+        } else {
+            av_log(s, AV_LOG_DEBUG, "Stream %d: Start code found, no BSF needed\n", st->index);
         }
     }
 
