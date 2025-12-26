@@ -864,6 +864,7 @@ static const StreamType HLS_SAMPLE_ENC_types[] = {
 };
 
 static const StreamType REGD_types[] = {
+    { MKTAG('A', 'V', '0', '1'), AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_AV1   },
     { MKTAG('d', 'r', 'a', 'c'), AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_DIRAC },
     { MKTAG('A', 'C', '-', '3'), AVMEDIA_TYPE_AUDIO, AV_CODEC_ID_AC3   },
     { MKTAG('A', 'C', '-', '4'), AVMEDIA_TYPE_AUDIO, AV_CODEC_ID_AC4   },
@@ -2292,6 +2293,75 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
             }
             sti->request_probe = 0;
             sti->need_parsing = 0;
+        }
+        break;
+    case AV1_VIDEO_DESCRIPTOR:
+        /* AV1 video descriptor per "AV1 Codec in MPEG-2 TS" spec
+         * https://aomediacodec.github.io/av1-mpeg2-ts/
+         * This descriptor is used in conjunction with registration descriptor 'AV01'
+         */
+        if (st->codecpar->codec_id == AV_CODEC_ID_AV1) {
+            int marker_version, seq_profile, seq_level_idx_0, seq_tier_0;
+            int high_bitdepth, twelve_bit, monochrome;
+            int chroma_subsampling_x, chroma_subsampling_y, chroma_sample_position;
+            int hdr_wcg_idc;
+            uint8_t byte0, byte1, byte2, byte3;
+
+            if (desc_end - *pp < 4)
+                return AVERROR_INVALIDDATA;
+
+            byte0 = get8(pp, desc_end); /* marker(1) | version(7) */
+            byte1 = get8(pp, desc_end); /* seq_profile(3) | seq_level_idx_0(5) */
+            byte2 = get8(pp, desc_end); /* seq_tier_0(1) | high_bitdepth(1) | twelve_bit(1) | monochrome(1) | chroma_subsampling_x(1) | chroma_subsampling_y(1) | chroma_sample_position(2) */
+            byte3 = get8(pp, desc_end); /* hdr_wcg_idc(2) | reserved(1) | initial_presentation_delay_present(1) | initial_presentation_delay(4) */
+
+            marker_version = byte0;
+            if ((marker_version & 0x80) != 0x80) {
+                av_log(fc, AV_LOG_WARNING, "Invalid AV1 video descriptor marker\n");
+                break;
+            }
+
+            seq_profile    = (byte1 >> 5) & 0x07;
+            seq_level_idx_0 = byte1 & 0x1f;
+            seq_tier_0     = (byte2 >> 7) & 0x01;
+            high_bitdepth  = (byte2 >> 6) & 0x01;
+            twelve_bit     = (byte2 >> 5) & 0x01;
+            monochrome     = (byte2 >> 4) & 0x01;
+            chroma_subsampling_x = (byte2 >> 3) & 0x01;
+            chroma_subsampling_y = (byte2 >> 2) & 0x01;
+            chroma_sample_position = byte2 & 0x03;
+            hdr_wcg_idc    = (byte3 >> 6) & 0x03;
+
+            st->codecpar->profile = seq_profile;
+            st->codecpar->level   = seq_level_idx_0 | (seq_tier_0 << 8);
+
+            /* Derive bit depth */
+            if (seq_profile == 2 && high_bitdepth)
+                st->codecpar->bits_per_coded_sample = twelve_bit ? 12 : 10;
+            else if (seq_profile <= 2)
+                st->codecpar->bits_per_coded_sample = high_bitdepth ? 10 : 8;
+
+            /* Set chroma location based on chroma_sample_position */
+            if (!monochrome && chroma_subsampling_x && chroma_subsampling_y) {
+                switch (chroma_sample_position) {
+                case 1:
+                    st->codecpar->chroma_location = AVCHROMA_LOC_LEFT;
+                    break;
+                case 2:
+                    st->codecpar->chroma_location = AVCHROMA_LOC_TOPLEFT;
+                    break;
+                }
+            }
+
+            av_log(fc, AV_LOG_TRACE, "AV1 video descriptor: profile=%d, level=%d, tier=%d, "
+                   "bit_depth=%d, monochrome=%d, chroma_subsampling=%dx%d, "
+                   "chroma_sample_position=%d, hdr_wcg_idc=%d\n",
+                   seq_profile, seq_level_idx_0, seq_tier_0,
+                   st->codecpar->bits_per_coded_sample, monochrome,
+                   chroma_subsampling_x, chroma_subsampling_y,
+                   chroma_sample_position, hdr_wcg_idc);
+
+            sti->need_context_update = 1;
         }
         break;
     case DOVI_VIDEO_STREAM_DESCRIPTOR:

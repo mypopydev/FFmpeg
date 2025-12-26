@@ -230,6 +230,10 @@ https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/
 https://professional.dolby.com/siteassets/content-creation/dolby-vision-for-content-creators/dolby-vision-bitstreams-in-mpeg-2-transport-stream-multiplex-v1.2.pdf */
 #define DOVI_VIDEO_STREAM_DESCRIPTOR 0xb0
 
+/** see "AV1 Codec in MPEG-2 Transport Stream"
+https://aomediacodec.github.io/av1-mpeg2-ts/ */
+#define AV1_VIDEO_DESCRIPTOR 0x80
+
 #define DATA_COMPONENT_DESCRIPTOR 0xfd /* ARIB STD-B10 */
 
 typedef struct MpegTSContext MpegTSContext;
