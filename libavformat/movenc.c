@@ -7007,8 +7007,11 @@ int ff_mov_write_packet(AVFormatContext *s, AVPacket *pkt)
             } else if(par->codec_id == AV_CODEC_ID_HEVC && extradata_size > 21) {
                 int nal_size_length = (extradata[21] & 0x3) + 1;
                 ret = ff_mov_cenc_avc_write_nal_units(s, &trk->cenc, nal_size_length, pb, pkt->data, size);
-            } else if(par->codec_id == AV_CODEC_ID_VVC) {
-                ret = AVERROR_PATCHWELCOME;
+            } else if(par->codec_id == AV_CODEC_ID_VVC && extradata_size > 0 &&
+                     (extradata[0] & 0xf8) == 0xf8) {
+                /* Ensure extradata is vvcC format (reserved bits 0xf8) */
+                int nal_size_length = ((extradata[0] >> 1) & 0x3) + 1;
+                ret = ff_mov_cenc_avc_write_nal_units(s, &trk->cenc, nal_size_length, pb, pkt->data, size);
             } else if(par->codec_id == AV_CODEC_ID_AV1) {
                 av_assert0(size == pkt->size);
                 ret = ff_mov_cenc_av1_write_obus(s, &trk->cenc, pb, pkt);
@@ -8799,6 +8802,13 @@ static int mov_check_bitstream(AVFormatContext *s, AVStream *st,
             ret = ff_stream_add_bitstream_filter(st, "aac_adtstoasc", NULL);
     } else if (st->codecpar->codec_id == AV_CODEC_ID_VP9) {
         ret = ff_stream_add_bitstream_filter(st, "vp9_superframe", NULL);
+    } else if (st->codecpar->codec_id == AV_CODEC_ID_AV1) {
+        /* AV1 in MP4/MOV uses Low Overhead Bitstream Format (no start codes).
+         * If input is Start Code Based Format (from MPEG-TS), convert it.
+         */
+        if (pkt->size >= 4 && AV_RB24(pkt->data) == 0x000001) {
+            ret = ff_stream_add_bitstream_filter(st, "av1_ts", "mode=from_ts");
+        }
     }
 
     return ret;
