@@ -36,6 +36,7 @@
 #include "libavcodec/defs.h"
 #include "libavcodec/get_bits.h"
 #include "libavcodec/opus/opus.h"
+#include "libavcodec/bsf.h"
 #include "avformat.h"
 #include "mpegts.h"
 #include "internal.h"
@@ -273,6 +274,8 @@ typedef struct PESContext {
     AVBufferRef *buffer;
     SLConfigDescr sl;
     int merged_st;
+    AVBSFContext *bsf;
+    AVPacket *bsf_pkt;
 } PESContext;
 
 EXTERN const FFInputFormat ff_mpegts_demuxer;
@@ -569,6 +572,8 @@ static void mpegts_close_filter(MpegTSContext *ts, MpegTSFilter *filter)
     else if (filter->type == MPEGTS_PES) {
         PESContext *pes = filter->u.pes_filter.opaque;
         av_buffer_unref(&pes->buffer);
+        av_bsf_free(&pes->bsf);
+        av_packet_free(&pes->bsf_pkt);
         /* referenced private data will be freed later in
          * avformat_close_input (pes->st->priv_data == pes) */
         if (!pes->st || pes->merged_st) {
@@ -1058,7 +1063,50 @@ static int new_pes_packet(PESContext *pes, AVPacket *pkt)
     pkt->dts = pes->dts;
     /* store position of first TS packet of this PES packet */
     pkt->pos   = pes->ts_packet_pos;
+    if (!pes->bsf && pes->st && pes->st->codecpar->codec_id == AV_CODEC_ID_AV1) {
+        const AVBitStreamFilter *filter = av_bsf_get_by_name("av1_ts");
+        if (filter) {
+            int ret;
+            if ((ret = av_bsf_alloc(filter, &pes->bsf)) >= 0) {
+                avcodec_parameters_copy(pes->bsf->par_in, pes->st->codecpar);
+                pes->bsf->time_base_in = pes->st->time_base;
+                if ((ret = av_opt_set(pes->bsf->priv_data, "mode", "from_ts", 0)) < 0)
+                     av_log(pes->stream, AV_LOG_WARNING, "Failed to set av1_ts mode to from_ts: %d\n", ret);
+
+                if ((ret = av_bsf_init(pes->bsf)) < 0) {
+                     av_bsf_free(&pes->bsf);
+                } else {
+                     pes->bsf_pkt = av_packet_alloc();
+                     if (!pes->bsf_pkt)
+                         av_bsf_free(&pes->bsf);
+                }
+            }
+        }
+    }
+
     pkt->flags = pes->flags;
+
+    if (pes->bsf) {
+        int stream_index = pkt->stream_index;
+        int64_t pos = pkt->pos;
+        int ret = av_bsf_send_packet(pes->bsf, pkt);
+        if (ret < 0) {
+            av_log(pes->stream, AV_LOG_WARNING, "Error sending to av1_ts: %d\n", ret);
+            pes->buffer = NULL;
+            return ret;
+        }
+
+        ret = av_bsf_receive_packet(pes->bsf, pkt);
+        if (ret < 0) {
+            pes->buffer = NULL;
+            if (ret == AVERROR(EAGAIN))
+                return 0;
+            av_log(pes->stream, AV_LOG_WARNING, "Error receiving from av1_ts: %d\n", ret);
+            return ret;
+        }
+        pkt->stream_index = stream_index;
+        pkt->pos = pos;
+    }
 
     pes->buffer = NULL;
     reset_pes_packet_state(pes);

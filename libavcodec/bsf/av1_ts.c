@@ -98,13 +98,23 @@ static int av1_to_ts_filter(AVBSFContext *ctx, AVPacket *pkt)
     int out_size = 0;
     int max_out_size;
     AV1OBU obu;
+    AVPacket *in = NULL;
 
-    ret = ff_bsf_get_packet_ref(ctx, pkt);
-    if (ret < 0)
+    /* Move input packet to 'in' */
+    in = av_packet_alloc();
+    if (!in)
+        return AVERROR(ENOMEM);
+
+    ret = ff_bsf_get_packet_ref(ctx, in);
+    if (ret < 0) {
+        av_packet_free(&in);
         return ret;
+    }
 
-    in_data = pkt->data;
-    in_size = pkt->size;
+    in_data = in->data;
+    in_size = in->size;
+
+    av_log(ctx, AV_LOG_DEBUG, "av1_to_ts: input size %d\n", in_size);
 
     /* Calculate maximum output size:
      * For each OBU: 3 bytes start code + escaped OBU data
@@ -114,8 +124,19 @@ static int av1_to_ts_filter(AVBSFContext *ctx, AVPacket *pkt)
     max_out_size = in_size * 2 + 64;  /* conservative estimate */
 
     ret = av_new_packet(pkt, max_out_size);
-    if (ret < 0)
+    if (ret < 0) {
+        av_packet_unref(in);
+        av_packet_free(&in);
         return ret;
+    }
+
+    ret = av_packet_copy_props(pkt, in);
+    if (ret < 0) {
+        av_packet_unref(pkt);
+        av_packet_unref(in);
+        av_packet_free(&in);
+        return ret;
+    }
 
     out_data = pkt->data;
 
@@ -127,10 +148,14 @@ static int av1_to_ts_filter(AVBSFContext *ctx, AVPacket *pkt)
         ret = ff_av1_extract_obu(&obu, in_data, in_size, ctx);
         if (ret < 0) {
             av_log(ctx, AV_LOG_ERROR, "Failed to extract OBU\n");
-            goto fail;
+            av_packet_unref(pkt);
+            av_packet_unref(in);
+            av_packet_free(&in);
+            return ret;
         }
 
         obu_size = obu.raw_size;
+        av_log(ctx, AV_LOG_DEBUG, "OBU size %d, type %d\n", obu_size, obu.type);
 
         /* Write start code */
         out_data[out_size++] = 0;
@@ -146,11 +171,9 @@ static int av1_to_ts_filter(AVBSFContext *ctx, AVPacket *pkt)
     }
 
     av_shrink_packet(pkt, out_size);
+    av_packet_unref(in);
+    av_packet_free(&in);
     return 0;
-
-fail:
-    av_packet_unref(pkt);
-    return ret;
 }
 
 /**
