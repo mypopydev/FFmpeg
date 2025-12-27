@@ -8799,6 +8799,13 @@ static int mov_check_bitstream(AVFormatContext *s, AVStream *st,
             ret = ff_stream_add_bitstream_filter(st, "aac_adtstoasc", NULL);
     } else if (st->codecpar->codec_id == AV_CODEC_ID_VP9) {
         ret = ff_stream_add_bitstream_filter(st, "vp9_superframe", NULL);
+    } else if (st->codecpar->codec_id == AV_CODEC_ID_AV1) {
+        /* AV1 in MP4/MOV uses Low Overhead Bitstream Format (no start codes).
+         * If input is Start Code Based Format (from MPEG-TS), convert it.
+         */
+        if (pkt->size >= 4 && AV_RB24(pkt->data) == 0x000001) {
+            ret = ff_stream_add_bitstream_filter(st, "av1_ts", "mode=from_ts");
+        }
     }
 
     return ret;
