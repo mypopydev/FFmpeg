@@ -18,6 +18,7 @@ libavformat/riscv/cpu_common.c
 libswresample/log2_tab.c
 libswscale/log2_tab.c
 libswscale/riscv/cpu_common.c
+tests/api/api-av1-ts-bsf-test.c
 tools/uncoded_frame.c
 tools/yuvcmp.c
 Headers without standard inclusion guards:
