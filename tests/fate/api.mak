@@ -28,6 +28,11 @@ fate-api-threadmessage: $(APITESTSDIR)/api-threadmessage-test$(EXESUF)
 fate-api-threadmessage: CMD = run $(APITESTSDIR)/api-threadmessage-test$(EXESUF) 3 10 30 50 2 20 40
 fate-api-threadmessage: CMP = null
 
+FATE_API-$(CONFIG_AVCODEC) += fate-api-av1-ts-bsf
+fate-api-av1-ts-bsf: $(APITESTSDIR)/api-av1-ts-bsf-test$(EXESUF)
+fate-api-av1-ts-bsf: CMD = run $(APITESTSDIR)/api-av1-ts-bsf-test$(EXESUF)
+fate-api-av1-ts-bsf: CMP = null
+
 FATE_API_SAMPLES-$(CONFIG_AVFORMAT) += $(FATE_API_SAMPLES_LIBAVFORMAT-yes)
 
 ifdef SAMPLES
