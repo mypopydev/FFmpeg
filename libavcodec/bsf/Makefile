@@ -7,6 +7,7 @@ OBJS-$(CONFIG_APV_METADATA_BSF)           += bsf/apv_metadata.o
 OBJS-$(CONFIG_AV1_FRAME_MERGE_BSF)        += bsf/av1_frame_merge.o
 OBJS-$(CONFIG_AV1_FRAME_SPLIT_BSF)        += bsf/av1_frame_split.o
 OBJS-$(CONFIG_AV1_METADATA_BSF)           += bsf/av1_metadata.o
+OBJS-$(CONFIG_AV1_TS_BSF)                 += bsf/av1_ts.o
 OBJS-$(CONFIG_CHOMP_BSF)                  += bsf/chomp.o
 OBJS-$(CONFIG_DCA_CORE_BSF)               += bsf/dca_core.o
 OBJS-$(CONFIG_DTS2PTS_BSF)                += bsf/dts2pts.o
