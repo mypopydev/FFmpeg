@@ -92,6 +92,26 @@ Deletes Padding OBUs.
 
 @end table
 
+@section av1_ts
+
+Convert AV1 bitstreams between Annex B (as used in MPEG-TS) and Low Overhead (standard) formats.
+
+@table @option
+@item mode
+Set the conversion mode.
+
+@table @samp
+@item to_ts
+Convert from Low Overhead to Annex B (MPEG-TS compatible).
+Inserts Start Codes and applies emulation prevention bytes.
+It also ensures a Temporal Delimiter OBU is present at the beginning of each packet.
+
+@item from_ts
+Convert from Annex B to Low Overhead.
+Strips Start Codes and removes emulation prevention bytes.
+@end table
+@end table
+
 @section chomp
 
 Remove zero padding at the end of a packet.
