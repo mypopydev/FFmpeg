@@ -1473,6 +1473,13 @@ static int flv_check_bitstream(AVFormatContext *s, AVStream *st,
         if (pkt->size > 2 && (AV_RB16(pkt->data) & 0xfff0) == 0xfff0)
             return ff_stream_add_bitstream_filter(st, "aac_adtstoasc", NULL);
     }
+    if (st->codecpar->codec_id == AV_CODEC_ID_AV1 && pkt->size >= 4) {
+        /* AV1 in FLV uses Low Overhead Bitstream Format (no start codes).
+         * If input is Start Code Based Format (0x000001 prefix per OBU),
+         * insert av1_ts BSF to convert it. */
+        if (AV_RB24(pkt->data) == 0x000001)
+            return ff_stream_add_bitstream_filter(st, "av1_ts", "mode=from_ts");
+    }
     if (!st->codecpar->extradata_size &&
             (st->codecpar->codec_id == AV_CODEC_ID_H264 ||
              st->codecpar->codec_id == AV_CODEC_ID_HEVC ||
