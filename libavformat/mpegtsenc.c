@@ -27,6 +27,7 @@
 #include "libavutil/mathematics.h"
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
+#include "libavutil/pixdesc.h"
 
 #include "libavcodec/ac3_parser_internal.h"
 #include "libavcodec/bytestream.h"
@@ -373,6 +374,9 @@ static int get_dvb_stream_type(AVFormatContext *s, AVStream *st)
         break;
     case AV_CODEC_ID_VVC:
         stream_type = STREAM_TYPE_VIDEO_VVC;
+        break;
+    case AV_CODEC_ID_AV1:
+        stream_type = STREAM_TYPE_PRIVATE_DATA;
         break;
     case AV_CODEC_ID_CAVS:
         stream_type = STREAM_TYPE_VIDEO_CAVS;
@@ -810,6 +814,99 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
             } else if (stream_type == STREAM_TYPE_VIDEO_CAVS || stream_type == STREAM_TYPE_VIDEO_AVS2 ||
                        stream_type == STREAM_TYPE_VIDEO_AVS3) {
                 put_registration_descriptor(&q, MKTAG('A', 'V', 'S', 'V'));
+            } else if (codec_id == AV_CODEC_ID_AV1) {
+                /* AV1 uses PRIVATE_DATA stream type with 'AV01' registration descriptor
+                 * and AV1 video descriptor per https://aomediacodec.github.io/av1-mpeg2-ts/
+                 */
+                int seq_profile = st->codecpar->profile >= 0 ? st->codecpar->profile : 0;
+                int seq_level_idx_0 = st->codecpar->level >= 0 ? (st->codecpar->level & 0x1f) : 1;
+                int seq_tier_0 = st->codecpar->level >= 0 ? ((st->codecpar->level >> 8) & 0x01) : 0;
+                int high_bitdepth = 0, twelve_bit = 0, monochrome = 0;
+                int chroma_subsampling_x = 1, chroma_subsampling_y = 1;
+                int chroma_sample_position = 0;
+                int hdr_wcg_idc = 0;
+
+                /* Derive high_bitdepth and twelve_bit from bits_per_coded_sample */
+                if (st->codecpar->bits_per_coded_sample == 10) {
+                    high_bitdepth = 1;
+                } else if (st->codecpar->bits_per_coded_sample == 12) {
+                    high_bitdepth = 1;
+                    twelve_bit = 1;
+                }
+
+                /* Derive chroma subsampling from pixel format */
+                if (st->codecpar->format != AV_PIX_FMT_NONE) {
+                    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(st->codecpar->format);
+                    if (desc) {
+                        if (desc->nb_components == 1) {
+                            monochrome = 1;
+                            chroma_subsampling_x = 1;
+                            chroma_subsampling_y = 1;
+                        } else {
+                            chroma_subsampling_x = desc->log2_chroma_w ? 1 : 0;
+                            chroma_subsampling_y = desc->log2_chroma_h ? 1 : 0;
+                        }
+                    }
+                }
+
+                /* Derive chroma_sample_position from chroma_location */
+                switch (st->codecpar->chroma_location) {
+                case AVCHROMA_LOC_LEFT:
+                    chroma_sample_position = 1;
+                    break;
+                case AVCHROMA_LOC_TOPLEFT:
+                    chroma_sample_position = 2;
+                    break;
+                default:
+                    chroma_sample_position = 0;
+                    break;
+                }
+
+                /* Derive hdr_wcg_idc from color properties:
+                 * 0 = SDR
+                 * 1 = WCG only (Wide Color Gamut without HDR)
+                 * 2 = HDR and WCG (both HDR transfer and wide gamut)
+                 * 3 = No indication
+                 *
+                 * HDR is indicated by PQ (SMPTE ST 2084) or HLG (ARIB STD-B67) transfer.
+                 * WCG is indicated by BT.2020 color primaries.
+                 */
+                {
+                    int is_hdr = (st->codecpar->color_trc == AVCOL_TRC_SMPTE2084 ||
+                                  st->codecpar->color_trc == AVCOL_TRC_ARIB_STD_B67);
+                    int is_wcg = (st->codecpar->color_primaries == AVCOL_PRI_BT2020);
+
+                    if (is_hdr && is_wcg) {
+                        hdr_wcg_idc = 2;  /* HDR and WCG */
+                    } else if (is_hdr) {
+                        /* HDR without WCG primaries - still signal as HDR+WCG since
+                         * HDR content typically implies wide gamut even if not explicitly
+                         * tagged with BT.2020 primaries */
+                        hdr_wcg_idc = 2;
+                    } else if (is_wcg) {
+                        hdr_wcg_idc = 1;  /* WCG only (SDR with wide gamut) */
+                    } else {
+                        hdr_wcg_idc = 0;  /* SDR */
+                    }
+
+                    av_log(s, AV_LOG_DEBUG, "AV1 stream %d: color_trc=%d, color_primaries=%d, "
+                           "is_hdr=%d, is_wcg=%d, hdr_wcg_idc=%d\n",
+                           i, st->codecpar->color_trc, st->codecpar->color_primaries,
+                           is_hdr, is_wcg, hdr_wcg_idc);
+                }
+
+                /* Registration descriptor 'AV01' - must come first */
+                put_registration_descriptor(&q, MKTAG('A', 'V', '0', '1'));
+
+                /* AV1 video descriptor */
+                *q++ = AV1_VIDEO_DESCRIPTOR;     /* descriptor_tag */
+                *q++ = 4;                        /* descriptor_length */
+                *q++ = 0x81;                     /* marker(1) | version(7) = 1 */
+                *q++ = (seq_profile << 5) | (seq_level_idx_0 & 0x1f);
+                *q++ = (seq_tier_0 << 7) | (high_bitdepth << 6) | (twelve_bit << 5) |
+                       (monochrome << 4) | (chroma_subsampling_x << 3) |
+                       (chroma_subsampling_y << 2) | (chroma_sample_position & 0x03);
+                *q++ = (hdr_wcg_idc << 6);       /* hdr_wcg_idc(2) | reserved(1)=0 | initial_presentation_delay_present(1)=0 | reserved(4)=0 */
             }
             break;
         case AVMEDIA_TYPE_DATA:
@@ -1453,6 +1550,8 @@ static int get_pes_stream_id(AVFormatContext *s, AVStream *st, int stream_id, in
     if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
         if (st->codecpar->codec_id == AV_CODEC_ID_DIRAC)
             return STREAM_ID_EXTENDED_STREAM_ID;
+        else if (st->codecpar->codec_id == AV_CODEC_ID_AV1)
+            return STREAM_ID_PRIVATE_STREAM_1;
         else
             return STREAM_ID_VIDEO_STREAM_0;
     } else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
@@ -1673,8 +1772,10 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
                 *q++ = len >> 8;
                 *q++ = len;
                 val  = 0x80;
-                /* data alignment indicator is required for subtitle and data streams */
-                if (st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE || st->codecpar->codec_type == AVMEDIA_TYPE_DATA)
+                /* data alignment indicator is required for subtitle, data streams, and AV1 */
+                if (st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE ||
+                    st->codecpar->codec_type == AVMEDIA_TYPE_DATA ||
+                    st->codecpar->codec_id == AV_CODEC_ID_AV1)
                     val |= 0x04;
                 *q++ = val;
                 *q++ = flags;
@@ -2325,6 +2426,33 @@ static int mpegts_check_bitstream(AVFormatContext *s, AVStream *st,
                         ((st->codecpar->extradata[0] & e->mask) == e->value))))
             return ff_stream_add_bitstream_filter(st, e->bsf_name, NULL);
     }
+
+    /* AV1 in MPEG-TS uses Start Code Based Format (0x000001 prefix per OBU).
+     * If input is Low Overhead Bitstream Format (no start codes), insert av1_ts BSF.
+     */
+    if (st->codecpar->codec_id == AV_CODEC_ID_AV1) {
+        int is_low_overhead = 0;
+
+        /* Check extradata for AV1CodecConfigurationRecord (starts with 0x81) */
+        if (st->codecpar->extradata_size >= 4 && (st->codecpar->extradata[0] & 0x80)) {
+            is_low_overhead = 1;
+            av_log(s, AV_LOG_DEBUG, "Stream %d: AV1CodecConfigurationRecord found in extradata, assuming Low Overhead\n", st->index);
+        } else if (pkt->size >= 4) {
+             /* Check if data starts with start code 0x000001 */
+            if (AV_RB24(pkt->data) != 0x000001) {
+                is_low_overhead = 1;
+                av_log(s, AV_LOG_DEBUG, "Stream %d: No start code found in packet, assuming Low Overhead\n", st->index);
+            }
+        }
+
+        if (is_low_overhead) {
+            av_log(s, AV_LOG_INFO, "Auto-inserting av1_ts BSF for stream %d\n", st->index);
+            return ff_stream_add_bitstream_filter(st, "av1_ts", "mode=to_ts");
+        } else {
+             av_log(s, AV_LOG_DEBUG, "Stream %d: Start code found or Annex B implied, no BSF needed\n", st->index);
+        }
+    }
+
     return 1;
 }
 
