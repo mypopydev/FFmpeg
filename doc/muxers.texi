@@ -3056,6 +3056,26 @@ and @code{service_name}. If they are not set the default for
 @code{service_provider} is @samp{FFmpeg} and the default for
 @code{service_name} is @samp{Service01}.
 
+@subsection AV1 Streams
+
+AV1 streams are automatically converted from low-overhead bitstream format
+(as used in MP4/WebM containers) to start code based format (Annex B) as
+required by the MPEG-TS specification. The conversion is handled internally
+by the @code{av1_ts} bitstream filter and is transparent to the user.
+
+The HDR/WCG indicator in the AV1 video descriptor is automatically derived
+from the stream's color parameters. The @code{hdr_wcg_idc} field in the PMT
+AV1 descriptor is set according to transfer characteristics and color
+primaries:
+@table @samp
+@item 0 = SDR (Standard Dynamic Range)
+No HDR or Wide Color Gamut transfer functions or primaries detected.
+@item 1 = WCG (Wide Color Gamut)
+Wide Color Gamut primaries (e.g., BT.2020) detected, but no HDR transfer function.
+@item 2 = HDR+WCG
+Both HDR transfer function (PQ or HLG) and Wide Color Gamut primaries detected.
+@end table
+
 @subsection Options
 
 The muxer options are:
