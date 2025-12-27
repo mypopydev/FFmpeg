@@ -18,6 +18,7 @@ version <next>:
 - JPEG-XS parser
 - JPEG-XS decoder and encoder through libsvtjpegxs
 - JPEG-XS raw bitstream muxer and demuxer
+- AV1 in MPEG-TS muxer and demuxer
 
 
 version 8.0:
